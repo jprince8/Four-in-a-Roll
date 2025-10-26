@@ -28,7 +28,7 @@
     *, *::before, *::after{ box-sizing: border-box; }
 
     .app{display:flex; align-items:center; justify-content:center; min-height:100%; padding:22px;}
-    .panel{ width: var(--panel-width); }
+    .panel{ width: var(--panel-width); display:flex; flex-direction:column; align-items:center; gap:18px; }
 
     .header{ position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 0px); width: 100%; padding:10px 12px; z-index:1000; }
 .header-inner{ width:100%; max-width:none; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 0 clamp(12px, 3vw, 24px); }
@@ -56,7 +56,9 @@
     button:active{transform: translateY(1px)}
     button[disabled]{opacity:.6; cursor:not-allowed}
 
-    .board-wrap{ position: relative; padding: 16px; border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); }
+    .board-box{ width: min(92vmin, var(--panel-width)); aspect-ratio: 1 / 1; margin: 0 auto; display:flex; align-items:center; justify-content:center; max-width:100%; }
+
+    .board-wrap{ position: relative; padding: 16px; border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); max-width:100%; max-height:100%; display:flex; align-items:center; justify-content:center; }
 
     .grid{ display:grid; grid-template-columns: repeat(var(--cols), var(--cell-size)); grid-template-rows: repeat(var(--rows), var(--cell-size)); gap:8px; margin: 0 auto; width: fit-content; user-select:none; position: relative; z-index: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
@@ -139,15 +141,17 @@
         </div>
       </div>
 
-      <div class="board-wrap">
-        <div class="grid" id="grid" role="grid" aria-label="7 columns by 6 rows connect four board"></div>
-        <!-- Face overlay sits ABOVE discs/animations and shows holes as transparent -->
-        <svg class="board-face" id="boardFace" aria-hidden="true"></svg>
-        <div class="popup" id="popup" aria-live="assertive" aria-modal="true" role="dialog">
-          <div class="popup-card">
-            <div class="popup-title">Game Over</div>
-            <p id="popupMsg">Player wins!</p>
-            <button id="popupReset" class="popup-btn">Reset game</button>
+      <div class="board-box">
+        <div class="board-wrap">
+          <div class="grid" id="grid" role="grid" aria-label="7 columns by 6 rows connect four board"></div>
+          <!-- Face overlay sits ABOVE discs/animations and shows holes as transparent -->
+          <svg class="board-face" id="boardFace" aria-hidden="true"></svg>
+          <div class="popup" id="popup" aria-live="assertive" aria-modal="true" role="dialog">
+            <div class="popup-card">
+              <div class="popup-title">Game Over</div>
+              <p id="popupMsg">Player wins!</p>
+              <button id="popupReset" class="popup-btn">Reset game</button>
+            </div>
           </div>
         </div>
       </div>
