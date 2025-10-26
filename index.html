@@ -33,7 +33,15 @@
         + (var(--rows) - 1) * var(--grid-gap)
         + 2 * var(--board-frame-padding)
       );
-      --board-size: max(var(--board-width), var(--board-height));
+      /* 0.70710678118 ~= 1 / sqrt(2); ensures space for the board as it rotates */
+      --board-rotated-bound: calc(
+        (var(--board-width) + var(--board-height)) * 0.70710678118
+      );
+      --board-size: max(
+        var(--board-width),
+        var(--board-height),
+        var(--board-rotated-bound)
+      );
       --panel-width: min(98vw, var(--board-size));
     }
 
