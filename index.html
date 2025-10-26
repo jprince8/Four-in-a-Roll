@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>4-in-a-roll</title>
+  <style>
+    :root{
+      --cell-size: clamp(49px, 7.65vmin, 77px);
+      --cols: 7;
+      --rows: 6;
+      --board-blue: #0f3b8c;
+      --board-blue-dark: #0b2f70;
+      --bg: #0b1020;
+      --text: #e9eef6;
+      --muted: #98a2b3;
+      --red: #e63946;   /* Player 1 */
+      --yellow: #f4d03f;/* Player 2 */
+      --win: #34d399;   /* highlight */
+      --shadow: 0 10px 25px rgba(0,0,0,0.25);
+      --radius: 18px;
+      --panel-width: min(98vw, calc(var(--cell-size) * var(--cols) + (var(--cols) - 1) * 8px + 32px));
+    }
+
+    html, body{ height:100%; background: radial-gradient(1200px 700px at 70% -10%, #14233f 0%, #0a0f1e 55%, #070b16 100%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; margin:0; }
+    *, *::before, *::after{ box-sizing: border-box; }
+
+    .app{display:flex; align-items:center; justify-content:center; min-height:100%; padding:22px;}
+    .panel{ width: var(--panel-width); }
+
+    .header{ position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 0px); width: 100%; padding:10px 12px; z-index:1000; }
+.header-inner{ width:100%; max-width:none; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 0 clamp(12px, 3vw, 24px); }
+    .status{display:flex; align-items:center; gap:10px; font-weight:600; flex:1; min-width:0; }
+    .status .disc{ width:22px; height:22px; border-radius:50%; box-shadow: var(--shadow); opacity: 1; position: static; inset: auto; }
+
+    .controls{display:flex; gap:8px; flex:0 0 auto;}
+    button{ appearance:none; border:0; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer; background:#1f2a44; color:#eaf1ff; box-shadow: var(--shadow); }
+    button:hover{filter:brightness(1.06)}
+    button:active{transform: translateY(1px)}
+    button[disabled]{opacity:.6; cursor:not-allowed}
+
+    .board-wrap{ position: relative; padding: 16px; border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); }
+
+    .grid{ display:grid; grid-template-columns: repeat(var(--cols), var(--cell-size)); grid-template-rows: repeat(var(--rows), var(--cell-size)); gap:8px; margin: 0 auto; width: fit-content; user-select:none; position: relative; z-index: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+    .cell{ width: var(--cell-size); height: var(--cell-size); position:relative; cursor: pointer; }
+    .cell::before{ content:""; position:absolute; inset:0; border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.10), rgba(0,0,0,0.18)); box-shadow: inset 0 0 0 18px rgba(0,0,0,0.15), inset 0 0 18px rgba(0,0,0,0.25); }
+    .hole{  position:absolute; inset:8px; border-radius:50%; background: radial-gradient(circle at 45% 40%, rgba(255,255,255,.25), rgba(255,255,255,0) 35%), #0b1530; box-shadow: inset 0 0 10px rgba(0,0,0,.45);  z-index:1; }
+
+    /* Grid discs */
+    .grid .disc{ position:absolute; inset:8px; border-radius:50%; opacity:0; box-shadow: 0 6px 14px rgba(0,0,0,.35), inset 0 -6px 10px rgba(0,0,0,0.18), inset 0 8px 18px rgba(255,255,255,.15); transition: opacity .001s linear; will-change: opacity; z-index:1; pointer-events: none; }
+    .grid .disc.show{ opacity:1; }
+
+    .disc.p1{ background: radial-gradient(circle at 30% 25%, #fff4, #0000 45%), var(--red); }
+    .disc.p2{ background: radial-gradient(circle at 30% 25%, #fff4, #0000 45%), var(--yellow); }
+
+    .disc.floating{ position:absolute; inset:auto; border-radius:50%; z-index: 10; pointer-events: none; box-shadow: 0 6px 14px rgba(0,0,0,.35), inset 0 -6px 10px rgba(0,0,0,0.18), inset 0 8px 18px rgba(255,255,255,.15); }
+
+    .grid .disc.win{ outline: 6px solid var(--win); box-shadow: 0 0 0 8px rgba(52,211,153,.18), 0 0 30px rgba(52,211,153,.5), 0 6px 14px rgba(0,0,0,.35) }
+
+    .popup{ position:absolute; inset:0; display:grid; place-items:center; background: rgba(0,0,0,0.35); opacity:0; pointer-events:none; transition: opacity .25s ease; border-radius: inherit; z-index:200; }
+    .popup.show{ opacity:1; pointer-events:auto; }
+    .popup-card{ background:#0f1b36; border:1px solid #264472; box-shadow: var(--shadow); padding:20px 22px; border-radius:16px; text-align:center; max-width: 80vw; }
+    .popup-title{ font-weight:800; color:#e8f0ff; margin-bottom:8px; font-size:1.1rem; }
+    .popup-btn{ margin-top:10px; appearance:none; border:0; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer; background:#1f2a44; color:#eaf1ff; box-shadow: var(--shadow); }
+
+    .sr-only{ position:absolute!important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .board-face{ position:absolute; inset:0; pointer-events:none; z-index:30; border-radius: inherit; display:block; width:100%; height:100%; }
+    body{ padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+</style>
+</head>
+<body>
+  <h1 style="text-align:center; margin:12px 0; font-size:1.8rem; color:#dbe7ff;">4-in-a-roll</h1>
+  <div class="app">
+    <div class="panel" role="application" aria-label="Connect 4 game">
+      <div class="header">
+        <div class="header-inner">
+          <div class="status" id="status" aria-live="polite">
+            <div class="disc" id="statusDisc" aria-hidden="true"></div>
+            <span id="statusText">Red to move</span>
+          </div>
+          <div class="controls">
+            <button id="resetBtn" title="New game (R)">New game</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="grid" id="grid" role="grid" aria-label="7 columns by 6 rows connect four board"></div>
+        <!-- Face overlay sits ABOVE discs/animations and shows holes as transparent -->
+        <svg class="board-face" id="boardFace" aria-hidden="true"></svg>
+        <div class="popup" id="popup" aria-live="assertive" aria-modal="true" role="dialog">
+          <div class="popup-card">
+            <div class="popup-title">Game Over</div>
+            <p id="popupMsg">Player wins!</p>
+            <button id="popupReset" class="popup-btn">Reset game</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="sr-only" id="live" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    'use strict';
+
+    // ==== Constants (mutable via rotation) ====
+    let ROWS = 6;   // bottom index = 0
+    let COLS = 7;
+
+    // ==== State ====
+    let board = makeBoard(ROWS, COLS); // 0 empty, 1 p1, 2 p2
+    let currentPlayer = 1; // 1 or 2
+    let startingPlayer = 1; // alternates who begins on each reset (first reset -> Yellow)
+    let selectedColumn = 3;
+    let gameOver = false;
+    const history = []; // {row, col, player}
+    let animating = false; // placing
+    let rotating = false;  // rotating/settling
+    let rotateTimer = null;
+    let pendingCol = null; // queue a tap while animating/rotating
+    let inputLock = false; // debounce for single tap
+    let rotatePending = false; // during pre-rotate delay
+
+    // ==== Elements ====
+    const gridEl = document.getElementById('grid');
+    const selectorEl = document.getElementById('selector'); // may be null
+    const statusEl = document.getElementById('statusText');
+    const liveEl = document.getElementById('live');
+    const resetBtn = document.getElementById('resetBtn');
+    const popupEl = document.getElementById('popup');
+    const popupMsgEl = document.getElementById('popupMsg');
+    const popupResetBtn = document.getElementById('popupReset');
+    const statusDiscEl = document.getElementById('statusDisc');
+
+    // ==== UI Build ====
+    function buildBoard(){
+      applySizeVars();
+      if(selectorEl){ selectorEl.innerHTML=''; }
+
+      gridEl.innerHTML = '';
+      gridEl.setAttribute('aria-label', COLS + ' columns by ' + ROWS + ' rows connect four board');
+      for(let r=ROWS-1; r>=0; r--){
+        for(let c=0; c<COLS; c++){
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.setAttribute('role', 'gridcell');
+          cell.setAttribute('aria-label', `Row ${r+1}, Column ${c+1}`);
+          cell.dataset.row = String(r);
+          cell.dataset.col = String(c);
+          const hole = document.createElement('div');
+          hole.className = 'hole';
+          const disc = document.createElement('div');
+          disc.className = 'disc';
+          disc.dataset.row = String(r);
+          disc.dataset.col = String(c);
+          cell.appendChild(hole);
+          cell.appendChild(disc);
+          // (click handled by grid-level delegation)
+          cell.addEventListener('mouseenter', () => setSelectedColumn(c));
+          gridEl.appendChild(cell);
+        }
+      }
+      updateSelector();
+      renderBoard();
+    }
+
+    function makeBoard(rows, cols){ return Array.from({ length: rows }, () => Array(cols).fill(0)); }
+
+    function setSelectedColumn(col){ selectedColumn = col; updateSelector(); }
+
+    function updateSelector(){
+      document.documentElement.style.setProperty('--current-color', currentPlayer === 1 ? 'var(--red)' : 'var(--yellow)');
+      if(!selectorEl) return;
+      const slots = selectorEl.children;
+      for(let i=0;i<slots.length;i++){
+        const isActive = i === selectedColumn;
+        slots[i].style.setProperty('--current-color', currentPlayer === 1 ? 'var(--red)' : 'var(--yellow)');
+        slots[i].style.setProperty('--selector-visible', (isActive && !rotating && !animating) ? '1' : '0');
+      }
+    }
+
+    function updateStatusDisc(){ if(!statusDiscEl) return; statusDiscEl.className = 'disc ' + (currentPlayer === 1 ? 'p1' : 'p2'); }
+
+    function renderBoard(){
+      const discs = gridEl.querySelectorAll('.disc');
+      for(const disc of discs){
+        const r = Number(disc.dataset.row);
+        const c = Number(disc.dataset.col);
+        const rowArr = board[r];
+        const val = rowArr ? rowArr[c] : 0;
+        disc.classList.remove('p1','p2','show','win');
+        if(val === 1){ disc.classList.add('p1','show'); }
+        else if(val === 2){ disc.classList.add('p2','show'); }
+      }
+    }
+
+    function getNextOpenRow(col){ if(col < 0 || col >= COLS) return -1; for(let r=0; r<ROWS; r++) if(board[r][col] === 0) return r; return -1; }
+
+    function handleColumnClick(col){
+      if(gameOver) return;
+      if(animating || rotating || rotatePending){ pendingCol = col; return; }
+      if(inputLock) return;
+      inputLock = true;
+      const row = getNextOpenRow(col);
+      if(row === -1){ announce('Column ' + (col+1) + ' is full.'); inputLock = false; return; }
+      placeDisc(row, col, currentPlayer, { animate: true });
+    }
+
+    function placeDisc(row, col, player, { animate } = { animate:false }){
+      board[row][col] = player;
+      history.push({ row, col, player });
+
+      const disc = queryDisc(row, col);
+      disc.classList.remove('p1','p2','show','win');
+      disc.classList.add(player === 1 ? 'p1' : 'p2');
+
+      if(animate){
+        animating = true;
+        dropAnimation(row, col, player, () => {
+          disc.classList.add('show');
+          animating = false;
+          afterMove(row, col);
+          inputLock = false;
+          if(pendingCol !== null){ const pc = pendingCol; pendingCol = null; handleColumnClick(pc); }
+        });
+      } else {
+        disc.classList.add('show');
+        afterMove(row, col);
+        inputLock = false;
+      }
+    }
+
+    function afterMove(row, col){
+      const winLine = checkWin(row, col);
+      if(winLine){
+        if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+        gameOver = true;
+        highlightWin(winLine);
+        const who = currentPlayer === 1 ? 'Red' : 'Yellow';
+        statusEl.textContent = who + ' wins!';
+        popupMsgEl.textContent = who + ' wins!';
+        popupEl.classList.add('show');
+        statusDiscEl && (statusDiscEl.className = 'disc');
+        announce(`${who} wins`);
+        return;
+      }
+      if(isDraw()){
+        if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+        gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.'); return;
+      }
+      currentPlayer = currentPlayer === 1 ? 2 : 1;
+      statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
+      updateSelector();
+      updateStatusDisc();
+      // Auto-rotate 0.25s after each non-terminal move
+      if(rotateTimer) { clearTimeout(rotateTimer); rotateTimer = null; }
+      rotatePending = true;
+      rotateTimer = setTimeout(() => { if(!gameOver && !animating && !rotating) rotateBoardCW(); }, 250);
+    }
+
+    // === Animations ===
+    const EASE_DOWN = 'cubic-bezier(.11, 0, .5, 0)'; // ease-in
+    const EASE_UP   = 'cubic-bezier(.33, 1, .68, 1)'; // ease-out
+    const DROP_SPEED_PX_PER_MS = 0.6; // global constant speed (slower)
+
+    function computeTiming(distance, pxPerMs = DROP_SPEED_PX_PER_MS){
+      const mainMs = distance / pxPerMs;     // proportional to distance
+      const bounceMs = mainMs * 0.18;        // 18% of main
+      const total = mainMs + 2 * bounceMs;
+      const k1 = mainMs / total;             // impact fraction
+      const k2 = (mainMs + bounceMs) / total;// apex fraction
+      const bounceUp = Math.max(6, distance * 0.10);
+      return { mainMs, bounceMs, total, k1, k2, bounceUp };
+    }
+
+    function animateDrop(floatEl, startTop, endTop, delayMs = 0){
+      const distance = Math.abs(endTop - startTop);
+      if (distance <= 0.5) {
+        floatEl.style.top = endTop + 'px';
+        return new Animation();
+      }
+      const { total, k1, k2, bounceUp } = computeTiming(distance, DROP_SPEED_PX_PER_MS);
+
+      return floatEl.animate([
+        { top: startTop + 'px',            offset: 0,   easing: EASE_DOWN }, // ease-in fall
+        { top: endTop   + 'px',            offset: k1,  easing: EASE_UP    }, // bounce upward: ease-out
+        { top: (endTop - bounceUp) + 'px', offset: k2,  easing: EASE_DOWN  }, // fall back: ease-in
+        { top: endTop   + 'px',            offset: 1 }
+      ], { duration: total, fill: 'forwards', delay: delayMs });
+    }
+
+    function dropAnimation(row, col, player, done){
+      const container = document.querySelector('.board-wrap');
+      const cRect = container.getBoundingClientRect();
+      const topDisc = queryDisc(ROWS-1, col);
+      const targetDisc = queryDisc(row, col);
+      if(!topDisc || !targetDisc){ done && done(); return; }
+
+      const startRect = topDisc.getBoundingClientRect();
+      const endRect   = targetDisc.getBoundingClientRect();
+      const size = Math.min(endRect.width, endRect.height);
+      const floatDisc = document.createElement('div');
+      floatDisc.className = 'disc ' + (player===1?'p1':'p2') + ' floating';
+      floatDisc.style.width = size + 'px';
+      floatDisc.style.height = size + 'px';
+      floatDisc.style.left = (endRect.left - cRect.left) + 'px';
+      floatDisc.style.top  = (startRect.top - cRect.top - size - 8) + 'px'; // start above board
+      floatDisc.style.transform = 'translateZ(0)';
+      container.appendChild(floatDisc);
+
+      const startTop = parseFloat(floatDisc.style.top);
+      const endTop   = (endRect.top - cRect.top);
+      const anim = animateDrop(floatDisc, startTop, endTop, 0);
+      anim.onfinish = () => { requestAnimationFrame(()=>floatDisc.remove()); done && done(); };
+      anim.oncancel = anim.onfinish;
+    }
+
+    function queryDisc(row, col){ return gridEl.querySelector('.disc[data-row="' + row + '"][data-col="' + col + '"]'); }
+
+    function clearWinHighlights(){ gridEl.querySelectorAll('.disc.win').forEach(d=>d.classList.remove('win')); }
+    function highlightWin(cells){ clearWinHighlights(); for(const {r,c} of cells){ const d = queryDisc(r,c); if(d) d.classList.add('win'); } }
+
+    function inBounds(r,c){ return r>=0 && r<ROWS && c>=0 && c<COLS; }
+
+    function checkWin(row, col){
+      const player = board[row][col]; if(player === 0) return null;
+      const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+      for(const [dr,dc] of dirs){
+        const line = [{r:row,c:col}];
+        let r = row + dr, c = col + dc;
+        while(inBounds(r,c) && board[r][c] === player){ line.push({r,c}); r += dr; c += dc; }
+        r = row - dr; c = col - dc;
+        while(inBounds(r,c) && board[r][c] === player){ line.unshift({r,c}); r -= dr; c -= dc; }
+        if(line.length >= 4) return line.slice(0,4);
+      }
+      return null;
+    }
+
+    function isDraw(){
+      for(let c=0;c<COLS;c++){
+        if(board[ROWS-1][c] === 0) return false;
+      }
+      return true;
+    }
+
+    function resetGame(){
+      if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+      board = makeBoard(ROWS, COLS);
+      history.length = 0;
+      gameOver = false;
+      // Flip the starter FIRST so the 2nd game begins with Yellow
+      startingPlayer = startingPlayer === 1 ? 2 : 1;
+      currentPlayer = startingPlayer;
+      clearWinHighlights();
+      renderBoard();
+      updateSelector();
+      updateStatusDisc();
+      popupEl.classList.remove('show');
+      statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
+      announce('New game started. ' + (currentPlayer===1?'Red':'Yellow') + ' to move.');
+    }
+
+    function undo(){
+      if(history.length === 0 || animating || rotating) return;
+      const last = history.pop();
+      board[last.row][last.col] = 0;
+      gameOver = false;
+      clearWinHighlights();
+      currentPlayer = last.player;
+      renderBoard();
+      updateSelector();
+      updateStatusDisc();
+      statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
+      announce('Undid last move.');
+    }
+
+    function announce(msg){ liveEl.textContent = msg; }
+
+    function applySizeVars(){ document.documentElement.style.setProperty('--rows', String(ROWS)); document.documentElement.style.setProperty('--cols', String(COLS)); }
+    function deepCloneBoard(b){ return b.map(row=>row.slice()); }
+
+    function toTopIndexed(b, rows=ROWS, cols=COLS){ const out = Array.from({length: rows}, ()=>Array(cols).fill(0)); for(let rb=0; rb<rows; rb++){ const rt = rows-1-rb; for(let c=0;c<cols;c++){ out[rt][c]=b[rb][c]; } } return out; }
+    function fromTopIndexed(t, newRows, newCols){ const out = Array.from({length: newRows}, ()=>Array(newCols).fill(0)); for(let rt=0; rt<newRows; rt++){ const rb = newRows-1-rt; for(let c=0;c<newCols;c++){ out[rb][c]=t[rt][c]; } } return out; }
+
+    function rotateMatrixCW_bottomIndexed(b){
+      const top = toTopIndexed(b, ROWS, COLS);
+      const newTopRows = COLS; const newTopCols = ROWS;
+      const rot = Array.from({length:newTopRows},()=>Array(newTopCols).fill(0));
+      for(let r=0;r<newTopRows;r++) for(let c=0;c<newTopCols;c++) rot[r][c] = top[ROWS-1 - c][r];
+      return { newBoard: fromTopIndexed(rot, newTopRows, newTopCols), newRows: newTopRows, newCols: newTopCols };
+    }
+
+    function applyGravity(b, rows, cols){
+      const out = Array.from({length: rows}, ()=>Array(cols).fill(0));
+      for(let c=0;c<cols;c++){
+        let rr=0; // next free at bottom
+        for(let r=0;r<rows;r++) if(b[r][c]){ out[rr][c]=b[r][c]; rr++; }
+      }
+      return out;
+    }
+
+    function coordsToRect(r,c){ const disc = gridEl.querySelector('.disc[data-row="' + r + '"][data-col="' + c + '"]'); return disc ? disc.getBoundingClientRect() : null; }
+
+    function hasImmediateBelow(b, r, c){ return r>0 && !!b[r-1][c]; }
+    function computeDropDelay(b, r, c){
+      // 0.1s per consecutive occupied cell directly below in the pre-gravity board
+      let count = 0;
+      for(let rr = r - 1; rr >= 0 && b[rr][c]; rr--) count++;
+      return count * 100;
+    }
+
+    function rotateBoardCW(){
+      if(gameOver) return;
+      if(animating || rotating) return;
+      rotatePending = false; // we are starting rotation
+      rotating = true; updateSelector();
+      const wrap = document.querySelector('.board-wrap');
+
+      const onEnd = (ev)=>{
+        if(ev && ev.propertyName !== 'transform') return;
+        wrap.removeEventListener('transitionend', onEnd);
+
+        const { newBoard, newRows, newCols } = rotateMatrixCW_bottomIndexed(board);
+        ROWS = newRows; COLS = newCols;
+        if(selectedColumn >= COLS) selectedColumn = COLS - 1;
+        board = deepCloneBoard(newBoard);
+        buildBoard();
+
+        // Snap transform back to 0 without animation
+        const prevTransition = wrap.style.transition; wrap.style.transition = 'none'; wrap.style.transform = 'none'; void wrap.offsetWidth; wrap.style.transition = prevTransition;
+
+        queueMicrotask(()=>gravitySettle(() => {
+          rotating = false; updateSelector();
+          const win = scanAnyWin();
+          if(win){
+            if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+            gameOver = true; highlightWin(win);
+            const winnerVal = board[win[0].r][win[0].c];
+            const who = winnerVal === 1 ? 'Red' : 'Yellow';
+            statusEl.textContent = who + ' wins!';
+            popupMsgEl.textContent = who + ' wins!';
+            popupEl.classList.add('show');
+            statusDiscEl && (statusDiscEl.className = 'disc');
+            announce(`${who} wins`);
+          } else if(isDraw()){
+            if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+            gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.');
+          } else {
+            if(pendingCol !== null){ const pc = pendingCol; pendingCol = null; handleColumnClick(pc); }
+          }
+        }));
+      };
+
+      wrap.addEventListener('transitionend', onEnd);
+      requestAnimationFrame(()=>{ wrap.style.transform = 'rotate(90deg)'; });
+    }
+
+    function gravitySettle(done){
+      const container = document.querySelector('.board-wrap');
+      const cRect = container.getBoundingClientRect();
+      const before = deepCloneBoard(board);
+      const after = applyGravity(before, ROWS, COLS);
+
+      // Hide real discs during animation
+      gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity = '0'; });
+
+      let animations = 0; let finished = 0;
+      function onOneEnd(){ finished++; if(finished>=animations){ board = deepCloneBoard(after); renderBoard(); gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity = ''; }); done && done(); } }
+
+      for(let c=0;c<COLS;c++){
+        const tokens = [];
+        for(let r=0;r<ROWS;r++) if(before[r][c]) tokens.push({r, player: before[r][c]});
+        tokens.forEach((tok, idx)=>{
+          const targetRow = idx; if(targetRow === tok.r) return; // already in place
+          const startRect = coordsToRect(tok.r, c); const endRect = coordsToRect(targetRow, c); if(!startRect || !endRect) return;
+          const size = Math.min(endRect.width, endRect.height);
+          const floatDisc = document.createElement('div');
+          floatDisc.className = 'disc ' + (tok.player===1?'p1':'p2') + ' floating';
+          floatDisc.style.width = size + 'px'; floatDisc.style.height = size + 'px';
+          floatDisc.style.left = (endRect.left - cRect.left) + 'px';
+          floatDisc.style.top  = (startRect.top - cRect.top) + 'px';
+          floatDisc.style.transform = 'translateZ(0)';
+          container.appendChild(floatDisc);
+          animations++;
+
+          // Delay only based on consecutive discs below in the pre-gravity column
+          const delay = computeDropDelay(before, tok.r, c);
+          const anim = animateDrop(floatDisc, (startRect.top - cRect.top), (endRect.top - cRect.top), delay);
+          anim.onfinish = () => { floatDisc.remove(); onOneEnd(); };
+          anim.oncancel = anim.onfinish;
+        });
+      }
+
+      if(animations===0){ board = deepCloneBoard(after); renderBoard(); gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity=''; }); done && done(); }
+    }
+
+    function scanAnyWin(){ for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ if(board[r][c]){ const w = checkWin(r,c); if(w) return w; } } } return null; }
+
+    // Small pure helper for tests
+    function nextStarter(p){ return p===1?2:1; }
+
+    // ==== Dev tests (non-UI) ====
+    function runTests(){
+
+      const rows = ROWS, cols = COLS; const mk = () => Array.from({length:rows},()=>Array(cols).fill(0));
+      const results = []; const add = (name, pass) => { results.push({name, pass}); };
+      { const b = mk(); add('nextOpenRow empty => 0', getNextOpenRowPure(b,0)===0); b[0][0]=1; b[1][0]=2; add('nextOpenRow after two => 2', getNextOpenRowPure(b,0)===2); }
+      { const b = mk(); for(let c=0;c<4;c++) b[0][c]=1; add('horizontal win', !!checkWinPure(b,0,3)); }
+      { const b = mk(); for(let r=0;r<4;r++) b[r][2]=2; add('vertical win', !!checkWinPure(b,3,2)); }
+      { const b = mk(); b[0][0]=1; b[1][1]=1; b[2][2]=1; b[3][3]=1; add('diag TL-BR', !!checkWinPure(b,3,3)); }
+      { const b = mk(); b[3][0]=2; b[2][1]=2; b[1][2]=2; b[0][3]=2; add('diag BL-TR', !!checkWinPure(b,0,3)); }
+      { const b = mk(); for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) b[r][c]=1; add('draw when full top row', isDrawPure(b)===true); }
+      { const b = mk(); b[5][1]=1; b[3][1]=2; const g = applyGravity(b, rows, cols); add('gravity compacts tokens bottom-in-order', g[0][1]===1 && g[1][1]===2); }
+      { const rws = ROWS, cls = COLS; const b = Array.from({length:rws},()=>Array(cls).fill(0)); b[0][0]=1; b[0][1]=2; const top = toTopIndexed(b, rws, cls); const newTopRows = cls, newTopCols = rws; const rot = Array.from({length:newTopRows},()=>Array(newTopCols).fill(0)); for(let r=0;r<newTopRows;r++) for(let c=0;c<newTopCols;c++) rot[r][c] = top[rws-1 - c][r]; const nb = fromTopIndexed(rot, newTopRows, newTopCols); const settled = applyGravity(nb, newTopRows, newTopCols); add('rotate+gravity keeps order', settled[0][0]===1 && settled[1][0]===2); }
+      { let sc = 6; const cols2 = 6; const clamped = Math.min(sc, cols2-1); add('selectedColumn clamp', clamped === 5); }
+      { const b = mk(); b[0][0]=1; b[0][1]=1; b[0][2]=1; add('three-in-a-row not win', checkWinPure(b,0,2)===null); }
+      { const b = mk(); for(let r=0;r<rows;r++) b[r][4]=1; add('nextOpenRow full column => -1', getNextOpenRowPure(b,4,rows)===-1); }
+      { const b = mk(); b[5][0]=1; b[4][0]=2; b[2][0]=1; const g = applyGravity(b, rows, cols); const count = (m,c)=>{ let k=0; for(let r=0;r<rows;r++) if(m[r][c]) k++; return k; }; add('gravity preserves column counts', count(b,0)===count(g,0)); }
+      { const b = mk(); b[0][0]=1; b[1][0]=2; const g = applyGravity(b, rows, cols); add('gravity idempotent when settled', g[0][0]===1 && g[1][0]===2); }
+      { const b = mk(); const r = rotateMatrixCW_bottomIndexed(b); add('rotate dims swap', r.newRows === COLS && r.newCols === ROWS); }
+      { const b = mk(); b[3][0]=1; b[2][0]=2; add('hasImmediateBelow true', hasImmediateBelow(b,3,0)===true); }
+      { const b = mk(); b[3][0]=1; add('hasImmediateBelow false', hasImmediateBelow(b,3,0)===false); }
+      { const t1 = computeTiming(100); const t2 = computeTiming(200); add('timing proportionality 200 vs 100', Math.abs((t2.mainMs / t1.mainMs) - 2) < 1e-9); }
+      { add('nextStarter 1→2', nextStarter(1)===2); }
+      { add('nextStarter 2→1', nextStarter(2)===1); }
+      { const b = mk(); b[3][0]=1; b[2][0]=1; b[1][0]=1; add('computeDropDelay top-of-stack (r=3) => 200ms', computeDropDelay(b,3,0)===200); add('computeDropDelay mid (r=2) => 100ms', computeDropDelay(b,2,0)===100); add('computeDropDelay above gap (r=1) => 0ms', computeDropDelay(b,1,0)===0); }
+      const passed = results.filter(r=>r.pass).length; console.groupCollapsed('Connect4 tests: ' + passed + '/' + results.length + ' passed'); for(const r of results){ console[r.pass?'log':'error'](`${r.pass?'✔':'✘'} ${r.name}`); } console.groupEnd();
+    }
+
+    // Pure helpers for tests
+    function getNextOpenRowPure(b, col, rows = ROWS){ if(col<0||col>=b[0].length) return -1; for(let r=0;r<rows;r++){ if(b[r][col]===0) return r; } return -1; }
+    function inBoundsPure(r,c,rows=ROWS,cols=COLS){ return r>=0 && r<rows && c>=0 && c<cols; }
+    function checkWinPure(b, lastRow, lastCol, rows=ROWS, cols=COLS){
+      const player = b[lastRow][lastCol]; if(!player) return null;
+      const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+      for(const [dr,dc] of dirs){
+        const line = [{r:lastRow,c:lastCol}];
+        let r=lastRow+dr, c=lastCol+dc; while(inBoundsPure(r,c,rows,cols) && b[r][c]===player){ line.push({r,c}); r+=dr; c+=dc; }
+        r=lastRow-dr; c=lastCol-dc; while(inBoundsPure(r,c,rows,cols) && b[r][c]===player){ line.unshift({r,c}); r-=dr; c-=dc; }
+        if(line.length>=4) return line.slice(0,4);
+      }
+      return null;
+    }
+    function isDrawPure(b, rows=ROWS, cols=COLS){ for(let c=0;c<cols;c++){ if(b[rows-1][c]===0) return false; } return true; }
+
+    // ==== Events ====
+    document.addEventListener('keydown', (ev) => {
+      if(ev.key === 'ArrowLeft'){ ev.preventDefault(); setSelectedColumn((selectedColumn + COLS - 1) % COLS); }
+      else if(ev.key === 'ArrowRight'){ ev.preventDefault(); setSelectedColumn((selectedColumn + 1) % COLS); }
+      else if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); handleColumnClick(selectedColumn); }
+      else if(ev.key.toLowerCase() === 'z'){ ev.preventDefault(); undo(); }
+      else if(ev.key.toLowerCase() === 'r'){ ev.preventDefault(); resetGame(); }
+    });
+
+    resetBtn.addEventListener('click', resetGame);
+    popupResetBtn.addEventListener('click', resetGame);
+
+    gridEl.addEventListener('click', (e)=>{
+      const cell = e.target.closest('.cell');
+      if(!cell || !gridEl.contains(cell)) return;
+      const col = Number(cell.dataset.col);
+      if(Number.isFinite(col)) handleColumnClick(col);
+    });
+
+    // ==== Init ====
+    buildBoard();
+    updateStatusDisc();
+    if((location.hash||'').includes('test') || /[?&]test=1\b/.test(location.search)){ runTests(); }
+  }());
+  </script>
+</body>
+</html>
