@@ -8,21 +8,12 @@
   <title>Four in a Roll</title>
   <style>
     :root{
+      --cell-size: clamp(49px, 7.65vmin, 77px);
       --cols: 7;
       --rows: 6;
-      --initial-cols: 7;
       --grid-gap: 8px;
       --board-padding: 16px;
-      --app-padding: clamp(12px, 4vw, 22px);
-      --cell-size-base: clamp(49px, 7.65vmin, 77px);
-      --cell-size-fallback: min(
-        var(--cell-size-base),
-        max(0px, calc((100vw - (var(--app-padding) * 2) - (var(--board-padding) * 2) - (var(--initial-cols) - 1) * var(--grid-gap)) / var(--initial-cols)))
-      );
-      --cell-size: var(--cell-size-override, var(--cell-size-fallback));
-      --board-width: var(--board-width-override, calc(var(--cell-size) * var(--initial-cols) + (var(--initial-cols) - 1) * var(--grid-gap) + (var(--board-padding) * 2)));
-      --panel-max-width: max(0px, 100vw - var(--app-padding) * 2);
-      --panel-width: min(var(--panel-width-override, var(--panel-max-width)), var(--board-width));
+      --square-margin: 0px;
       --board-blue: #0f3b8c;
       --board-blue-dark: #0b2f70;
       --bg: #0b1020;
@@ -33,13 +24,14 @@
       --win: #34d399;   /* highlight */
       --shadow: 0 10px 25px rgba(0,0,0,0.25);
       --radius: 18px;
+      --panel-width: min(98vw, calc(var(--cell-size) * var(--cols) + (var(--cols) - 1) * var(--grid-gap) + (var(--board-padding) * 2)));
     }
 
     html, body{ height:100%; background: radial-gradient(1200px 700px at 70% -10%, #14233f 0%, #0a0f1e 55%, #070b16 100%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; margin:0; }
     *, *::before, *::after{ box-sizing: border-box; }
 
-    .app{display:flex; align-items:center; justify-content:center; min-height:100%; padding:var(--app-padding);}
-    .panel{ width: min(var(--panel-width), 100%); margin: 0 auto; }
+    .app{display:flex; align-items:center; justify-content:center; min-height:100%; padding:22px;}
+    .panel{ width: var(--panel-width); }
 
     .header{ position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 0px); width: 100%; padding:10px 12px; z-index:1000; }
 .header-inner{ width:100%; max-width:none; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 0 clamp(12px, 3vw, 24px); }
@@ -67,7 +59,7 @@
     button:active{transform: translateY(1px)}
     button[disabled]{opacity:.6; cursor:not-allowed}
 
-    .board-wrap{ position: relative; padding: var(--board-padding); border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); width: min(100%, var(--board-width)); margin: 0 auto; }
+    .board-wrap{ position: relative; padding: calc(var(--board-padding) + var(--square-margin)) var(--board-padding); border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); }
 
     .grid{ display:grid; grid-template-columns: repeat(var(--cols), var(--cell-size)); grid-template-rows: repeat(var(--rows), var(--cell-size)); gap:var(--grid-gap); margin: 0 auto; width: fit-content; user-select:none; position: relative; z-index: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
@@ -171,17 +163,11 @@
   (function(){
     'use strict';
 
+    const ROOT = document.documentElement;
+
     // ==== Constants (mutable via rotation) ====
     let ROWS = 6;   // bottom index = 0
     let COLS = 7;
-    const BASE_COLS = COLS;
-    const ROOT = document.documentElement;
-    const layoutMetrics = {
-      boardWidth: 0,
-      panelWidth: 0,
-      boardPadding: 0,
-      gridGap: 0
-    };
 
     // ==== State ====
     let board = makeBoard(ROWS, COLS); // 0 empty, 1 p1, 2 p2
@@ -246,6 +232,7 @@
       }
       updateSelector();
       renderBoard();
+      updateSquareMargin();
     }
 
     function makeBoard(rows, cols){ return Array.from({ length: rows }, () => Array(cols).fill(0)); }
@@ -253,7 +240,7 @@
     function setSelectedColumn(col){ selectedColumn = col; updateSelector(); }
 
     function updateSelector(){
-      document.documentElement.style.setProperty('--current-color', currentPlayer === 1 ? 'var(--red)' : 'var(--yellow)');
+      ROOT.style.setProperty('--current-color', currentPlayer === 1 ? 'var(--red)' : 'var(--yellow)');
       if(!selectorEl) return;
       const slots = selectorEl.children;
       for(let i=0;i<slots.length;i++){
@@ -486,56 +473,26 @@
 
     function announce(msg){ liveEl.textContent = msg; }
 
+    let squareMarginRaf = 0;
+
     function applySizeVars(){
       ROOT.style.setProperty('--rows', String(ROWS));
       ROOT.style.setProperty('--cols', String(COLS));
-      applyLayoutSizingForCurrentCols();
     }
 
-    function applyLayoutSizingForCurrentCols(){
-      ROOT.style.setProperty('--initial-cols', String(BASE_COLS));
-      if(layoutMetrics.boardWidth <= 0){
-        return;
+    function updateSquareMargin(){
+      if(squareMarginRaf){
+        cancelAnimationFrame(squareMarginRaf);
       }
-      const cols = Math.max(1, COLS);
-      const totalGap = layoutMetrics.gridGap * Math.max(0, cols - 1);
-      const available = layoutMetrics.boardWidth - (layoutMetrics.boardPadding * 2) - totalGap;
-      const safeAvailable = Math.max(0, available);
-      const cellSize = safeAvailable / cols;
-      const safeCellSize = Number.isFinite(cellSize) ? cellSize : 0;
-      const panelWidth = layoutMetrics.panelWidth > 0 ? layoutMetrics.panelWidth : layoutMetrics.boardWidth;
-      ROOT.style.setProperty('--cell-size-override', safeCellSize.toFixed(4) + 'px');
-      ROOT.style.setProperty('--board-width-override', layoutMetrics.boardWidth.toFixed(4) + 'px');
-      ROOT.style.setProperty('--panel-width-override', panelWidth.toFixed(4) + 'px');
-    }
-
-    function computeBoardMetrics(){
-      const styles = getComputedStyle(ROOT);
-      const appPadding = parseFloat(styles.getPropertyValue('--app-padding')) || 0;
-      const boardPadding = parseFloat(styles.getPropertyValue('--board-padding')) || 0;
-      const gridGap = parseFloat(styles.getPropertyValue('--grid-gap')) || 0;
-      const cellSizeBase = parseFloat(styles.getPropertyValue('--cell-size-base')) || parseFloat(styles.getPropertyValue('--cell-size')) || 0;
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth || 0;
-      const usableWidth = Math.max(0, viewportWidth - (appPadding * 2) - (boardPadding * 2) - ((BASE_COLS - 1) * gridGap));
-      const cellFromWidth = BASE_COLS > 0 ? usableWidth / BASE_COLS : cellSizeBase;
-      const cellSize = Math.min(cellSizeBase || cellFromWidth, cellFromWidth);
-      const safeCellSize = Number.isFinite(cellSize) ? cellSize : 0;
-      const boardWidth = (safeCellSize * BASE_COLS) + ((BASE_COLS - 1) * gridGap) + (boardPadding * 2);
-      const panelMax = Math.max(0, viewportWidth - (appPadding * 2));
-      const panelWidth = Math.min(panelMax || boardWidth, boardWidth);
-      const safeBoardWidth = Number.isFinite(boardWidth) ? boardWidth : 0;
-      const safePanelWidth = Number.isFinite(panelWidth) ? panelWidth : safeBoardWidth;
-
-      layoutMetrics.boardPadding = boardPadding;
-      layoutMetrics.gridGap = gridGap;
-
-      if(safeBoardWidth <= 0){
-        return;
-      }
-
-      layoutMetrics.boardWidth = safeBoardWidth;
-      layoutMetrics.panelWidth = safePanelWidth > 0 ? safePanelWidth : safeBoardWidth;
-      applyLayoutSizingForCurrentCols();
+      squareMarginRaf = requestAnimationFrame(() => {
+        squareMarginRaf = 0;
+        if(!gridEl) return;
+        ROOT.style.setProperty('--square-margin', '0px');
+        const rect = gridEl.getBoundingClientRect();
+        const diff = rect.width - rect.height;
+        const margin = diff > 0 ? diff / 2 : 0;
+        ROOT.style.setProperty('--square-margin', margin.toFixed(2) + 'px');
+      });
     }
     function deepCloneBoard(b){ return b.map(row=>row.slice()); }
 
@@ -751,6 +708,8 @@
       setSettingsOpen(false);
     });
 
+    window.addEventListener('resize', updateSquareMargin);
+
     document.addEventListener('keydown', (ev) => {
       if(ev.key === 'Escape' && settingsOpen){
         setSettingsOpen(false);
@@ -770,18 +729,6 @@
 
     resetBtn.addEventListener('click', resetGame);
     popupResetBtn.addEventListener('click', resetGame);
-
-    let resizeRaf = 0;
-    function queueMetricUpdate(){
-      if(resizeRaf) return;
-      resizeRaf = requestAnimationFrame(() => {
-        resizeRaf = 0;
-        computeBoardMetrics();
-      });
-    }
-
-    computeBoardMetrics();
-    window.addEventListener('resize', queueMetricUpdate);
 
     gridEl.addEventListener('click', (e)=>{
       const cell = e.target.closest('.cell');
