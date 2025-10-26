@@ -23,11 +23,17 @@
       --radius: 18px;
       --grid-gap: 8px;
       --board-frame-padding: 16px;
-      --board-size: calc(
+      --board-width: calc(
         var(--cell-size) * var(--cols)
         + (var(--cols) - 1) * var(--grid-gap)
         + 2 * var(--board-frame-padding)
       );
+      --board-height: calc(
+        var(--cell-size) * var(--rows)
+        + (var(--rows) - 1) * var(--grid-gap)
+        + 2 * var(--board-frame-padding)
+      );
+      --board-size: max(var(--board-width), var(--board-height));
       --panel-width: min(98vw, var(--board-size));
     }
 
