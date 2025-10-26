@@ -10,14 +10,19 @@
     :root{
       --cols: 7;
       --rows: 6;
+      --initial-cols: 7;
       --grid-gap: 8px;
       --board-padding: 16px;
       --app-padding: clamp(12px, 4vw, 22px);
       --cell-size-base: clamp(49px, 7.65vmin, 77px);
-      --cell-size: min(
+      --cell-size-fallback: min(
         var(--cell-size-base),
-        max(0px, calc((100vw - (var(--app-padding) * 2) - (var(--board-padding) * 2) - (var(--cols) - 1) * var(--grid-gap)) / var(--cols)))
+        max(0px, calc((100vw - (var(--app-padding) * 2) - (var(--board-padding) * 2) - (var(--initial-cols) - 1) * var(--grid-gap)) / var(--initial-cols)))
       );
+      --cell-size: var(--cell-size-override, var(--cell-size-fallback));
+      --board-width: var(--board-width-override, calc(var(--cell-size) * var(--initial-cols) + (var(--initial-cols) - 1) * var(--grid-gap) + (var(--board-padding) * 2)));
+      --panel-max-width: max(0px, 100vw - var(--app-padding) * 2);
+      --panel-width: min(var(--panel-width-override, var(--panel-max-width)), var(--board-width));
       --board-blue: #0f3b8c;
       --board-blue-dark: #0b2f70;
       --bg: #0b1020;
@@ -28,10 +33,6 @@
       --win: #34d399;   /* highlight */
       --shadow: 0 10px 25px rgba(0,0,0,0.25);
       --radius: 18px;
-      --panel-width: min(
-        max(0px, 100vw - var(--app-padding) * 2),
-        calc(var(--cell-size) * var(--cols) + (var(--cols) - 1) * var(--grid-gap) + (var(--board-padding) * 2))
-      );
     }
 
     html, body{ height:100%; background: radial-gradient(1200px 700px at 70% -10%, #14233f 0%, #0a0f1e 55%, #070b16 100%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; margin:0; }
@@ -66,7 +67,7 @@
     button:active{transform: translateY(1px)}
     button[disabled]{opacity:.6; cursor:not-allowed}
 
-    .board-wrap{ position: relative; padding: var(--board-padding); border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); width: min(100%, calc(var(--cell-size) * var(--cols) + (var(--cols) - 1) * var(--grid-gap) + (var(--board-padding) * 2))); margin: 0 auto; }
+    .board-wrap{ position: relative; padding: var(--board-padding); border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); width: min(100%, var(--board-width)); margin: 0 auto; }
 
     .grid{ display:grid; grid-template-columns: repeat(var(--cols), var(--cell-size)); grid-template-rows: repeat(var(--rows), var(--cell-size)); gap:var(--grid-gap); margin: 0 auto; width: fit-content; user-select:none; position: relative; z-index: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
@@ -173,6 +174,8 @@
     // ==== Constants (mutable via rotation) ====
     let ROWS = 6;   // bottom index = 0
     let COLS = 7;
+    const BASE_COLS = COLS;
+    const ROOT = document.documentElement;
 
     // ==== State ====
     let board = makeBoard(ROWS, COLS); // 0 empty, 1 p1, 2 p2
@@ -477,7 +480,32 @@
 
     function announce(msg){ liveEl.textContent = msg; }
 
-    function applySizeVars(){ document.documentElement.style.setProperty('--rows', String(ROWS)); document.documentElement.style.setProperty('--cols', String(COLS)); }
+    function applySizeVars(){
+      ROOT.style.setProperty('--rows', String(ROWS));
+      ROOT.style.setProperty('--cols', String(COLS));
+    }
+
+    function computeBoardMetrics(){
+      const styles = getComputedStyle(ROOT);
+      const appPadding = parseFloat(styles.getPropertyValue('--app-padding')) || 0;
+      const boardPadding = parseFloat(styles.getPropertyValue('--board-padding')) || 0;
+      const gridGap = parseFloat(styles.getPropertyValue('--grid-gap')) || 0;
+      const cellSizeBase = parseFloat(styles.getPropertyValue('--cell-size-base')) || parseFloat(styles.getPropertyValue('--cell-size')) || 0;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth || 0;
+      const usableWidth = Math.max(0, viewportWidth - (appPadding * 2) - (boardPadding * 2) - ((BASE_COLS - 1) * gridGap));
+      const cellFromWidth = BASE_COLS > 0 ? usableWidth / BASE_COLS : cellSizeBase;
+      const cellSize = Math.min(cellSizeBase || cellFromWidth, cellFromWidth);
+      const safeCellSize = Number.isFinite(cellSize) ? cellSize : 0;
+      const boardWidth = (safeCellSize * BASE_COLS) + ((BASE_COLS - 1) * gridGap) + (boardPadding * 2);
+      const panelMax = Math.max(0, viewportWidth - (appPadding * 2));
+      const panelWidth = Math.min(panelMax || boardWidth, boardWidth);
+      const safeBoardWidth = Number.isFinite(boardWidth) ? boardWidth : 0;
+      const safePanelWidth = Number.isFinite(panelWidth) ? panelWidth : safeBoardWidth;
+      ROOT.style.setProperty('--cell-size-override', safeCellSize.toFixed(4) + 'px');
+      ROOT.style.setProperty('--board-width-override', safeBoardWidth.toFixed(4) + 'px');
+      ROOT.style.setProperty('--panel-width-override', safePanelWidth.toFixed(4) + 'px');
+      ROOT.style.setProperty('--initial-cols', String(BASE_COLS));
+    }
     function deepCloneBoard(b){ return b.map(row=>row.slice()); }
 
     function toTopIndexed(b, rows=ROWS, cols=COLS){ const out = Array.from({length: rows}, ()=>Array(cols).fill(0)); for(let rb=0; rb<rows; rb++){ const rt = rows-1-rb; for(let c=0;c<cols;c++){ out[rt][c]=b[rb][c]; } } return out; }
@@ -711,6 +739,18 @@
 
     resetBtn.addEventListener('click', resetGame);
     popupResetBtn.addEventListener('click', resetGame);
+
+    let resizeRaf = 0;
+    function queueMetricUpdate(){
+      if(resizeRaf) return;
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        computeBoardMetrics();
+      });
+    }
+
+    computeBoardMetrics();
+    window.addEventListener('resize', queueMetricUpdate);
 
     gridEl.addEventListener('click', (e)=>{
       const cell = e.target.closest('.cell');
