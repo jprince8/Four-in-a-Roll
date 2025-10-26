@@ -174,8 +174,7 @@
     let animating = false; // placing
     let rotating = false;  // rotating/settling
     let rotateTimer = null;
-    let pendingInput = null; // { col, turn }
-    let turnToken = 0;       // increments whenever a new turn begins
+    let turnReady = true;    // becomes true once rotation+gravity finish each turn
     let inputLock = false; // debounce for single tap
     let rotatePending = false; // during pre-rotate delay
     let randomizeRotation = false;
@@ -288,20 +287,14 @@
 
     function handleColumnClick(col){
       if(gameOver) return;
-      if(animating || rotating || rotatePending){ pendingInput = { col, turn: turnToken }; return; }
+      if(!turnReady) return;
+      if(animating || rotating || rotatePending) return;
       if(inputLock) return;
       inputLock = true;
       const row = getNextOpenRow(col);
       if(row === -1){ announce('Column ' + (col+1) + ' is full.'); inputLock = false; return; }
+      turnReady = false;
       placeDisc(row, col, currentPlayer, { animate: true });
-    }
-
-    function processPendingInput(){
-      if(!pendingInput) return;
-      if(pendingInput.turn !== turnToken){ pendingInput = null; return; }
-      const { col } = pendingInput;
-      pendingInput = null;
-      handleColumnClick(col);
     }
 
     function placeDisc(row, col, player, { animate } = { animate:false }){
@@ -318,14 +311,10 @@
           disc.classList.add('show');
           animating = false;
           afterMove(row, col);
-          inputLock = false;
-          processPendingInput();
         });
       } else {
         disc.classList.add('show');
         afterMove(row, col);
-        inputLock = false;
-        processPendingInput();
       }
     }
 
@@ -349,8 +338,6 @@
         gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.'); return;
       }
       currentPlayer = currentPlayer === 1 ? 2 : 1;
-      turnToken += 1;
-      pendingInput = null;
       statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
       updateSelector();
       updateStatusDisc();
@@ -447,14 +434,17 @@
 
     function resetGame(){
       if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+      rotatePending = false;
+      animating = false;
+      rotating = false;
       board = makeBoard(ROWS, COLS);
       history.length = 0;
       gameOver = false;
       // Flip the starter FIRST so the 2nd game begins with Yellow
       startingPlayer = startingPlayer === 1 ? 2 : 1;
       currentPlayer = startingPlayer;
-      turnToken = 0;
-      pendingInput = null;
+      turnReady = true;
+      inputLock = false;
       clearWinHighlights();
       renderBoard();
       updateSelector();
@@ -467,13 +457,15 @@
 
     function undo(){
       if(history.length === 0 || animating || rotating) return;
+      if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+      rotatePending = false;
       const last = history.pop();
       board[last.row][last.col] = 0;
       gameOver = false;
       clearWinHighlights();
       currentPlayer = last.player;
-      turnToken += 1;
-      pendingInput = null;
+      turnReady = true;
+      inputLock = false;
       renderBoard();
       updateSelector();
       updateStatusDisc();
@@ -575,7 +567,8 @@
             if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
             gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.');
           } else {
-            processPendingInput();
+            turnReady = true;
+            inputLock = false;
           }
         }));
       };
