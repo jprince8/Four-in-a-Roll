@@ -574,17 +574,30 @@
       const before = deepCloneBoard(board);
       const after = applyGravity(before, ROWS, COLS);
 
-      // Hide real discs during animation
-      gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity = '0'; });
+      function hideDisc(r, c){
+        const disc = queryDisc(r, c);
+        if(disc){
+          disc.style.opacity = '0';
+        }
+      }
 
       let animations = 0; let finished = 0;
-      function onOneEnd(){ finished++; if(finished>=animations){ board = deepCloneBoard(after); renderBoard(); gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity = ''; }); done && done(); } }
+      function onOneEnd(){
+        finished++;
+        if(finished>=animations){
+          board = deepCloneBoard(after);
+          renderBoard();
+          gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity = ''; });
+          done && done();
+        }
+      }
 
       for(let c=0;c<COLS;c++){
         const tokens = [];
         for(let r=0;r<ROWS;r++) if(before[r][c]) tokens.push({r, player: before[r][c]});
         tokens.forEach((tok, idx)=>{
-          const targetRow = idx; if(targetRow === tok.r) return; // already in place
+          const targetRow = idx;
+          if(targetRow === tok.r) return; // already in place
           const startRect = coordsToRect(tok.r, c); const endRect = coordsToRect(targetRow, c); if(!startRect || !endRect) return;
           const size = Math.min(endRect.width, endRect.height);
           const floatDisc = document.createElement('div');
@@ -596,6 +609,8 @@
           container.appendChild(floatDisc);
           animations++;
 
+          hideDisc(tok.r, c);
+
           // Delay only based on consecutive discs below in the pre-gravity column
           const delay = computeDropDelay(before, tok.r, c);
           const anim = animateDrop(floatDisc, (startRect.top - cRect.top), (endRect.top - cRect.top), delay);
@@ -603,8 +618,12 @@
           anim.oncancel = anim.onfinish;
         });
       }
-
-      if(animations===0){ board = deepCloneBoard(after); renderBoard(); gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity=''; }); done && done(); }
+      if(animations===0){
+        board = deepCloneBoard(after);
+        renderBoard();
+        gridEl.querySelectorAll('.disc').forEach(d=>{ d.style.opacity = ''; });
+        done && done();
+      }
     }
 
     function scanAnyWin(){ for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ if(board[r][c]){ const w = checkWin(r,c); if(w) return w; } } } return null; }
