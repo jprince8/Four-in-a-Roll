@@ -60,6 +60,14 @@
 
     .grid .disc.win{ outline: 6px solid var(--win); box-shadow: 0 0 0 8px rgba(52,211,153,.18), 0 0 30px rgba(52,211,153,.5), 0 6px 14px rgba(0,0,0,.35) }
 
+    .scoreboard{ display:flex; justify-content:center; gap:20px; margin:12px auto 18px; max-width:var(--panel-width); padding:0 clamp(12px, 3vw, 24px); font-weight:700; text-transform:uppercase; letter-spacing:0.06em; font-size:0.95rem; flex-wrap:wrap; }
+    .scoreboard .score{ display:flex; align-items:center; gap:10px; padding:12px 18px; border-radius:14px; background:rgba(13,24,48,0.7); box-shadow: var(--shadow); min-width:140px; justify-content:center; }
+    .scoreboard .label{ display:flex; align-items:center; gap:8px; }
+    .scoreboard .label::before{ content:""; width:16px; height:16px; border-radius:50%; box-shadow: var(--shadow); }
+    .scoreboard .score.p1 .label::before{ background:var(--red); }
+    .scoreboard .score.p2 .label::before{ background:var(--yellow); }
+    .scoreboard .value{ font-size:1.6rem; font-variant-numeric:tabular-nums; }
+
     .popup{ position:absolute; inset:0; display:grid; place-items:center; background: rgba(0,0,0,0.35); opacity:0; pointer-events:none; transition: opacity .25s ease; border-radius: inherit; z-index:200; }
     .popup.show{ opacity:1; pointer-events:auto; }
     .popup-card{ background:#0f1b36; border:1px solid #264472; box-shadow: var(--shadow); padding:20px 22px; border-radius:16px; text-align:center; max-width: 80vw; }
@@ -73,6 +81,16 @@
 </head>
 <body>
   <h1 style="text-align:center; margin:12px 0; font-size:1.8rem; color:#dbe7ff;">Four in a Roll</h1>
+  <div class="scoreboard" role="status" aria-live="polite">
+    <div class="score p1" aria-label="Red score">
+      <span class="label">Red</span>
+      <span class="value" id="scoreRed">0</span>
+    </div>
+    <div class="score p2" aria-label="Yellow score">
+      <span class="label">Yellow</span>
+      <span class="value" id="scoreYellow">0</span>
+    </div>
+  </div>
   <div class="app">
     <div class="panel" role="application" aria-label="Connect 4 game">
       <div class="header">
@@ -125,6 +143,7 @@
     let pendingCol = null; // queue a tap while animating/rotating
     let inputLock = false; // debounce for single tap
     let rotatePending = false; // during pre-rotate delay
+    const scores = { 1: 0, 2: 0 };
 
     // ==== Elements ====
     const gridEl = document.getElementById('grid');
@@ -136,6 +155,8 @@
     const popupMsgEl = document.getElementById('popupMsg');
     const popupResetBtn = document.getElementById('popupReset');
     const statusDiscEl = document.getElementById('statusDisc');
+    const scoreRedEl = document.getElementById('scoreRed');
+    const scoreYellowEl = document.getElementById('scoreYellow');
 
     // ==== UI Build ====
     function buildBoard(){
@@ -185,6 +206,17 @@
     }
 
     function updateStatusDisc(){ if(!statusDiscEl) return; statusDiscEl.className = 'disc ' + (currentPlayer === 1 ? 'p1' : 'p2'); }
+
+    function updateScoreboard(){
+      if(scoreRedEl) scoreRedEl.textContent = String(scores[1]);
+      if(scoreYellowEl) scoreYellowEl.textContent = String(scores[2]);
+    }
+
+    function incrementScore(player){
+      if(player !== 1 && player !== 2) return;
+      scores[player] += 1;
+      updateScoreboard();
+    }
 
     function renderBoard(){
       const discs = gridEl.querySelectorAll('.disc');
@@ -247,6 +279,7 @@
         popupEl.classList.add('show');
         statusDiscEl && (statusDiscEl.className = 'disc');
         announce(`${who} wins`);
+        incrementScore(currentPlayer);
         return;
       }
       if(isDraw()){
@@ -363,6 +396,7 @@
       popupEl.classList.remove('show');
       statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
       announce('New game started. ' + (currentPlayer===1?'Red':'Yellow') + ' to move.');
+      updateScoreboard();
     }
 
     function undo(){
@@ -447,6 +481,7 @@
             popupEl.classList.add('show');
             statusDiscEl && (statusDiscEl.className = 'disc');
             announce(`${who} wins`);
+            incrementScore(winnerVal);
           } else if(isDraw()){
             if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
             gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.');
@@ -570,6 +605,7 @@
     // ==== Init ====
     buildBoard();
     updateStatusDisc();
+    updateScoreboard();
     if((location.hash||'').includes('test') || /[?&]test=1\b/.test(location.search)){ runTests(); }
   }());
   </script>
