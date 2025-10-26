@@ -176,6 +176,12 @@
     let COLS = 7;
     const BASE_COLS = COLS;
     const ROOT = document.documentElement;
+    const layoutMetrics = {
+      boardWidth: 0,
+      panelWidth: 0,
+      boardPadding: 0,
+      gridGap: 0
+    };
 
     // ==== State ====
     let board = makeBoard(ROWS, COLS); // 0 empty, 1 p1, 2 p2
@@ -483,6 +489,24 @@
     function applySizeVars(){
       ROOT.style.setProperty('--rows', String(ROWS));
       ROOT.style.setProperty('--cols', String(COLS));
+      applyLayoutSizingForCurrentCols();
+    }
+
+    function applyLayoutSizingForCurrentCols(){
+      ROOT.style.setProperty('--initial-cols', String(BASE_COLS));
+      if(layoutMetrics.boardWidth <= 0){
+        return;
+      }
+      const cols = Math.max(1, COLS);
+      const totalGap = layoutMetrics.gridGap * Math.max(0, cols - 1);
+      const available = layoutMetrics.boardWidth - (layoutMetrics.boardPadding * 2) - totalGap;
+      const safeAvailable = Math.max(0, available);
+      const cellSize = safeAvailable / cols;
+      const safeCellSize = Number.isFinite(cellSize) ? cellSize : 0;
+      const panelWidth = layoutMetrics.panelWidth > 0 ? layoutMetrics.panelWidth : layoutMetrics.boardWidth;
+      ROOT.style.setProperty('--cell-size-override', safeCellSize.toFixed(4) + 'px');
+      ROOT.style.setProperty('--board-width-override', layoutMetrics.boardWidth.toFixed(4) + 'px');
+      ROOT.style.setProperty('--panel-width-override', panelWidth.toFixed(4) + 'px');
     }
 
     function computeBoardMetrics(){
@@ -501,10 +525,17 @@
       const panelWidth = Math.min(panelMax || boardWidth, boardWidth);
       const safeBoardWidth = Number.isFinite(boardWidth) ? boardWidth : 0;
       const safePanelWidth = Number.isFinite(panelWidth) ? panelWidth : safeBoardWidth;
-      ROOT.style.setProperty('--cell-size-override', safeCellSize.toFixed(4) + 'px');
-      ROOT.style.setProperty('--board-width-override', safeBoardWidth.toFixed(4) + 'px');
-      ROOT.style.setProperty('--panel-width-override', safePanelWidth.toFixed(4) + 'px');
-      ROOT.style.setProperty('--initial-cols', String(BASE_COLS));
+
+      layoutMetrics.boardPadding = boardPadding;
+      layoutMetrics.gridGap = gridGap;
+
+      if(safeBoardWidth <= 0){
+        return;
+      }
+
+      layoutMetrics.boardWidth = safeBoardWidth;
+      layoutMetrics.panelWidth = safePanelWidth > 0 ? safePanelWidth : safeBoardWidth;
+      applyLayoutSizingForCurrentCols();
     }
     function deepCloneBoard(b){ return b.map(row=>row.slice()); }
 
