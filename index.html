@@ -69,8 +69,14 @@
     .grid .disc.show{ opacity:1; }
 
     @keyframes undoGhostPulse{
-      0%, 100%{ transform:scale(0.92); }
-      50%{ transform:scale(1.04); }
+      0%, 100%{
+        transform:scale(0.92);
+        filter:brightness(1);
+      }
+      50%{
+        transform:scale(1.04);
+        filter:brightness(2);
+      }
     }
 
     .cell.undo-ghost::after{
@@ -84,6 +90,7 @@
       box-shadow:0 0 0 3px rgba(255,255,255,0.24);
       pointer-events:none;
       z-index:2;
+      will-change: transform, filter;
     }
 
     .cell.undo-ghost.ghost-p1::after{ background: rgba(230,57,70,0.8); box-shadow:0 0 0 3px rgba(230,57,70,0.28); }
