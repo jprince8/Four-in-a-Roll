@@ -141,10 +141,10 @@
                     </span>
                   </span>
                 </label>
-                <p class="settings-hint" id="undoHint">Adds an undo button and allows pressing Z</p>
+                <p class="settings-hint" id="undoHint">Adds an undo button and allows pressing Ctrl+Z (⌘Z on Mac)</p>
               </div>
             </div>
-            <button id="undoBtn" title="Undo last turn (Z)" hidden>Undo</button>
+            <button id="undoBtn" title="Undo last turn (Ctrl+Z / ⌘Z)" hidden>Undo</button>
             <button id="resetBtn" title="New game (R)">New game</button>
           </div>
         </div>
@@ -836,7 +836,7 @@
       else if(ev.key === 'ArrowRight'){ ev.preventDefault(); setSelectedColumn((selectedColumn + 1) % COLS); }
       else if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); handleColumnClick(selectedColumn); }
       else if(ev.key.toLowerCase() === 'z'){
-        if(undoEnabled){ ev.preventDefault(); undo(); }
+        if((ev.ctrlKey || ev.metaKey) && undoEnabled){ ev.preventDefault(); undo(); }
       }
       else if(ev.key.toLowerCase() === 'r'){ ev.preventDefault(); resetGame(); }
     });
