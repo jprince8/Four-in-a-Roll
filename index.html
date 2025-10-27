@@ -132,8 +132,19 @@
                   </span>
                 </label>
                 <p class="settings-hint" id="randomRotationHint">Makes the game less predictable</p>
+                <label class="toggle" for="undoToggle">
+                  <span>Enable undo</span>
+                  <span class="toggle-control">
+                    <input id="undoToggle" type="checkbox" aria-describedby="undoHint" />
+                    <span class="toggle-track" aria-hidden="true">
+                      <span class="toggle-thumb"></span>
+                    </span>
+                  </span>
+                </label>
+                <p class="settings-hint" id="undoHint">Adds an undo button and allows pressing Z</p>
               </div>
             </div>
+            <button id="undoBtn" title="Undo last turn (Z)" hidden>Undo</button>
             <button id="resetBtn" title="New game (R)">New game</button>
           </div>
         </div>
@@ -170,7 +181,7 @@
     let startingPlayer = 1; // alternates who begins on each reset (first reset -> Yellow)
     let selectedColumn = 3;
     let gameOver = false;
-    const history = []; // {row, col, player}
+    const turnHistory = [];
     let animating = false; // placing
     let rotating = false;  // rotating/settling
     let rotateTimer = null;
@@ -178,6 +189,7 @@
     let inputLock = false; // debounce for single tap
     let rotatePending = false; // during pre-rotate delay
     let randomizeRotation = false;
+    let undoEnabled = false;
     let settingsOpen = false;
     const scores = { 1: 0, 2: 0 };
 
@@ -196,6 +208,8 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsMenu = document.getElementById('settingsMenu');
     const randomRotationToggle = document.getElementById('randomRotationToggle');
+    const undoBtn = document.getElementById('undoBtn');
+    const undoToggle = document.getElementById('undoToggle');
 
     // ==== UI Build ====
     function buildBoard(){
@@ -293,13 +307,13 @@
       inputLock = true;
       const row = getNextOpenRow(col);
       if(row === -1){ announce('Column ' + (col+1) + ' is full.'); inputLock = false; return; }
+      prepareUndoSnapshot();
       turnReady = false;
       placeDisc(row, col, currentPlayer, { animate: true });
     }
 
     function placeDisc(row, col, player, { animate } = { animate:false }){
       board[row][col] = player;
-      history.push({ row, col, player });
 
       const disc = queryDisc(row, col);
       disc.classList.remove('p1','p2','show','win');
@@ -307,9 +321,11 @@
 
       if(animate){
         animating = true;
+        updateUndoAvailability();
         dropAnimation(row, col, player, () => {
           disc.classList.add('show');
           animating = false;
+          updateUndoAvailability();
           afterMove(row, col);
         });
       } else {
@@ -331,11 +347,14 @@
         statusDiscEl && (statusDiscEl.className = 'disc');
         announce(`${who} wins`);
         incrementScore(currentPlayer);
+        commitTurnSnapshot();
         return;
       }
       if(isDraw()){
         if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
-        gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.'); return;
+        gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.');
+        commitTurnSnapshot();
+        return;
       }
       currentPlayer = currentPlayer === 1 ? 2 : 1;
       statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
@@ -438,7 +457,6 @@
       animating = false;
       rotating = false;
       board = makeBoard(ROWS, COLS);
-      history.length = 0;
       gameOver = false;
       // Flip the starter FIRST so the 2nd game begins with Yellow
       startingPlayer = startingPlayer === 1 ? 2 : 1;
@@ -453,23 +471,24 @@
       statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
       announce('New game started. ' + (currentPlayer===1?'Red':'Yellow') + ' to move.');
       updateScoreboard();
+      turnHistory.length = 0;
+      commitTurnSnapshot();
     }
 
     function undo(){
-      if(history.length === 0 || animating || rotating) return;
+      if(!undoEnabled) return;
+      if(turnHistory.length <= 1 || animating || rotating) return;
       if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
       rotatePending = false;
-      const last = history.pop();
-      board[last.row][last.col] = 0;
-      gameOver = false;
+      turnHistory.pop();
+      const snapshot = turnHistory[turnHistory.length - 1];
+      if(!snapshot){
+        turnHistory.length = 0;
+        commitTurnSnapshot();
+        return;
+      }
+      restoreSnapshot(snapshot);
       clearWinHighlights();
-      currentPlayer = last.player;
-      turnReady = true;
-      inputLock = false;
-      renderBoard();
-      updateSelector();
-      updateStatusDisc();
-      statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
       announce('Undid last move.');
     }
 
@@ -477,6 +496,80 @@
 
     function applySizeVars(){ document.documentElement.style.setProperty('--rows', String(ROWS)); document.documentElement.style.setProperty('--cols', String(COLS)); }
     function deepCloneBoard(b){ return b.map(row=>row.slice()); }
+
+    function captureState(){
+      return {
+        board: deepCloneBoard(board),
+        rows: ROWS,
+        cols: COLS,
+        currentPlayer,
+        startingPlayer,
+        scores: { 1: scores[1], 2: scores[2] },
+        gameOver,
+        statusText: statusEl ? statusEl.textContent : '',
+        popupVisible: popupEl ? popupEl.classList.contains('show') : false,
+        popupMsg: popupMsgEl ? popupMsgEl.textContent : '',
+        selectedColumn,
+        turnReady,
+      };
+    }
+
+    function prepareUndoSnapshot(){
+      const snapshot = captureState();
+      turnHistory.push(snapshot);
+      updateUndoAvailability();
+    }
+
+    function commitTurnSnapshot(){
+      const snapshot = captureState();
+      if(turnHistory.length === 0){
+        turnHistory.push(snapshot);
+      } else {
+        turnHistory[turnHistory.length - 1] = snapshot;
+      }
+      updateUndoAvailability();
+    }
+
+    function restoreSnapshot(snapshot){
+      ROWS = snapshot.rows;
+      COLS = snapshot.cols;
+      selectedColumn = Math.min(snapshot.selectedColumn, COLS - 1);
+      board = deepCloneBoard(snapshot.board);
+      scores[1] = snapshot.scores[1];
+      scores[2] = snapshot.scores[2];
+      currentPlayer = snapshot.currentPlayer;
+      startingPlayer = snapshot.startingPlayer;
+      gameOver = snapshot.gameOver;
+      turnReady = snapshot.turnReady ?? true;
+      rotatePending = false;
+      animating = false;
+      rotating = false;
+      inputLock = false;
+      if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
+      buildBoard();
+      if(statusEl) statusEl.textContent = snapshot.statusText;
+      if(popupMsgEl) popupMsgEl.textContent = snapshot.popupMsg;
+      if(popupEl) popupEl.classList.toggle('show', !!snapshot.popupVisible);
+      updateScoreboard();
+      if(gameOver){
+        statusDiscEl && (statusDiscEl.className = 'disc');
+      } else {
+        updateStatusDisc();
+      }
+      updateUndoAvailability();
+    }
+
+    function updateUndoAvailability(){
+      if(!undoBtn) return;
+      undoBtn.hidden = !undoEnabled;
+      if(undoEnabled){
+        undoBtn.setAttribute('aria-hidden', 'false');
+      } else {
+        undoBtn.setAttribute('aria-hidden', 'true');
+      }
+      const canUndo = undoEnabled && turnHistory.length > 1 && !animating && !rotating;
+      undoBtn.disabled = !canUndo;
+    }
 
     function toTopIndexed(b, rows=ROWS, cols=COLS){ const out = Array.from({length: rows}, ()=>Array(cols).fill(0)); for(let rb=0; rb<rows; rb++){ const rt = rows-1-rb; for(let c=0;c<cols;c++){ out[rt][c]=b[rb][c]; } } return out; }
     function fromTopIndexed(t, newRows, newCols){ const out = Array.from({length: newRows}, ()=>Array(newCols).fill(0)); for(let rt=0; rt<newRows; rt++){ const rb = newRows-1-rt; for(let c=0;c<newCols;c++){ out[rb][c]=t[rt][c]; } } return out; }
@@ -529,9 +622,11 @@
       if(gameOver) return;
       if(animating || rotating) return;
       rotatePending = false; // we are starting rotation
-      rotating = true; updateSelector();
+      rotating = true;
+      updateUndoAvailability();
+      updateSelector();
       const wrap = document.querySelector('.board-wrap');
-      if(!wrap){ rotating = false; return; }
+      if(!wrap){ rotating = false; updateUndoAvailability(); return; }
       const normalizedDirection = direction === -1 ? -1 : 1;
       const degrees = normalizedDirection === -1 ? '-90deg' : '90deg';
 
@@ -550,7 +645,9 @@
         const prevTransition = wrap.style.transition; wrap.style.transition = 'none'; wrap.style.transform = 'none'; void wrap.offsetWidth; wrap.style.transition = prevTransition;
 
         queueMicrotask(()=>gravitySettle(() => {
-          rotating = false; updateSelector();
+          rotating = false;
+          updateSelector();
+          updateUndoAvailability();
           const win = scanAnyWin();
           if(win){
             if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
@@ -563,12 +660,15 @@
             statusDiscEl && (statusDiscEl.className = 'disc');
             announce(`${who} wins`);
             incrementScore(winnerVal);
+            commitTurnSnapshot();
           } else if(isDraw()){
             if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
             gameOver = true; statusEl.textContent = 'Draw — no more moves.'; popupMsgEl.textContent = 'Draw!'; popupEl.classList.add('show'); statusDiscEl && (statusDiscEl.className = 'disc'); announce('Draw.');
+            commitTurnSnapshot();
           } else {
             turnReady = true;
             inputLock = false;
+            commitTurnSnapshot();
           }
         }));
       };
@@ -700,6 +800,18 @@
       });
     }
 
+    if(undoToggle){
+      undoToggle.checked = undoEnabled;
+      undoToggle.addEventListener('change', () => {
+        undoEnabled = undoToggle.checked;
+        updateUndoAvailability();
+      });
+    }
+
+    if(undoBtn){
+      undoBtn.addEventListener('click', () => { undo(); });
+    }
+
     document.addEventListener('pointerdown', (ev) => {
       if(!settingsOpen) return;
       const target = ev.target;
@@ -723,7 +835,9 @@
       if(ev.key === 'ArrowLeft'){ ev.preventDefault(); setSelectedColumn((selectedColumn + COLS - 1) % COLS); }
       else if(ev.key === 'ArrowRight'){ ev.preventDefault(); setSelectedColumn((selectedColumn + 1) % COLS); }
       else if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); handleColumnClick(selectedColumn); }
-      else if(ev.key.toLowerCase() === 'z'){ ev.preventDefault(); undo(); }
+      else if(ev.key.toLowerCase() === 'z'){
+        if(undoEnabled){ ev.preventDefault(); undo(); }
+      }
       else if(ev.key.toLowerCase() === 'r'){ ev.preventDefault(); resetGame(); }
     });
 
@@ -741,6 +855,7 @@
     buildBoard();
     updateStatusDisc();
     updateScoreboard();
+    commitTurnSnapshot();
     if((location.hash||'').includes('test') || /[?&]test=1\b/.test(location.search)){ runTests(); }
   }());
   </script>
