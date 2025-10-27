@@ -68,6 +68,34 @@
     .grid .disc{ position:absolute; inset:8px; border-radius:50%; opacity:0; box-shadow: 0 6px 14px rgba(0,0,0,.35), inset 0 -6px 10px rgba(0,0,0,0.18), inset 0 8px 18px rgba(255,255,255,.15); transition: opacity .001s linear; will-change: opacity; z-index:1; pointer-events: none; }
     .grid .disc.show{ opacity:1; }
 
+    @keyframes undoGhostPulse{
+      0%, 100%{
+        transform:scale(0.92);
+        filter:brightness(1);
+      }
+      50%{
+        transform:scale(1.04);
+        filter:brightness(2);
+      }
+    }
+
+    .cell.undo-ghost::after{
+      content:"";
+      position:absolute;
+      inset:14px;
+      border-radius:50%;
+      opacity:0.8;
+      animation: undoGhostPulse 1s ease-in-out infinite;
+      background: rgba(255,255,255,0.8);
+      box-shadow:0 0 0 3px rgba(255,255,255,0.24);
+      pointer-events:none;
+      z-index:2;
+      will-change: transform, filter;
+    }
+
+    .cell.undo-ghost.ghost-p1::after{ background: rgba(230,57,70,0.8); box-shadow:0 0 0 3px rgba(230,57,70,0.28); }
+    .cell.undo-ghost.ghost-p2::after{ background: rgba(244,208,63,0.8); box-shadow:0 0 0 3px rgba(244,208,63,0.28); }
+
     .disc.p1{ background: radial-gradient(circle at 30% 25%, #fff4, #0000 45%), var(--red); }
     .disc.p2{ background: radial-gradient(circle at 30% 25%, #fff4, #0000 45%), var(--yellow); }
 
@@ -192,6 +220,8 @@
     let undoEnabled = false;
     let settingsOpen = false;
     const scores = { 1: 0, 2: 0 };
+    let lastTurnPlacement = null;
+    let undoGhostCell = null;
 
     // ==== Elements ====
     const gridEl = document.getElementById('grid');
@@ -216,6 +246,7 @@
       applySizeVars();
       if(selectorEl){ selectorEl.innerHTML=''; }
 
+      clearUndoGhost();
       gridEl.innerHTML = '';
       gridEl.setAttribute('aria-label', COLS + ' columns by ' + ROWS + ' rows connect four board');
       for(let r=ROWS-1; r>=0; r--){
@@ -314,6 +345,7 @@
 
     function placeDisc(row, col, player, { animate } = { animate:false }){
       board[row][col] = player;
+      lastTurnPlacement = { row, col, player, rows: ROWS, cols: COLS };
 
       const disc = queryDisc(row, col);
       disc.classList.remove('p1','p2','show','win');
@@ -425,6 +457,30 @@
 
     function queryDisc(row, col){ return gridEl.querySelector('.disc[data-row="' + row + '"][data-col="' + col + '"]'); }
 
+    function queryCell(row, col){ return gridEl.querySelector('.cell[data-row="' + row + '"][data-col="' + col + '"]'); }
+
+    function clearUndoGhost(){
+      if(undoGhostCell){
+        undoGhostCell.classList.remove('undo-ghost','ghost-p1','ghost-p2');
+        undoGhostCell = null;
+      }
+    }
+
+    function showUndoGhost(info){
+      clearUndoGhost();
+      if(!info) return;
+      const { row, col, player, rows, cols } = info;
+      if(rows != null && cols != null){
+        if(rows !== ROWS || cols !== COLS) return;
+      }
+      if(row == null || col == null) return;
+      if(row < 0 || col < 0 || row >= ROWS || col >= COLS) return;
+      const cell = queryCell(row, col);
+      if(!cell) return;
+      cell.classList.add('undo-ghost', player === 1 ? 'ghost-p1' : 'ghost-p2');
+      undoGhostCell = cell;
+    }
+
     function clearWinHighlights(){ gridEl.querySelectorAll('.disc.win').forEach(d=>d.classList.remove('win')); }
     function highlightWin(cells){ clearWinHighlights(); for(const {r,c} of cells){ const d = queryDisc(r,c); if(d) d.classList.add('win'); } }
 
@@ -463,7 +519,9 @@
       currentPlayer = startingPlayer;
       turnReady = true;
       inputLock = false;
+      lastTurnPlacement = null;
       clearWinHighlights();
+      clearUndoGhost();
       renderBoard();
       updateSelector();
       updateStatusDisc();
@@ -480,15 +538,21 @@
       if(turnHistory.length <= 1 || animating || rotating) return;
       if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
       rotatePending = false;
-      turnHistory.pop();
+      const undoneSnapshot = turnHistory.pop();
       const snapshot = turnHistory[turnHistory.length - 1];
       if(!snapshot){
         turnHistory.length = 0;
+        clearUndoGhost();
         commitTurnSnapshot();
         return;
       }
       restoreSnapshot(snapshot);
       clearWinHighlights();
+      if(undoneSnapshot && undoneSnapshot.lastPlacement){
+        showUndoGhost(undoneSnapshot.lastPlacement);
+      } else {
+        clearUndoGhost();
+      }
       announce('Undid last move.');
     }
 
@@ -511,10 +575,12 @@
         popupMsg: popupMsgEl ? popupMsgEl.textContent : '',
         selectedColumn,
         turnReady,
+        lastPlacement: lastTurnPlacement ? { row: lastTurnPlacement.row, col: lastTurnPlacement.col, player: lastTurnPlacement.player, rows: lastTurnPlacement.rows, cols: lastTurnPlacement.cols } : null,
       };
     }
 
     function prepareUndoSnapshot(){
+      clearUndoGhost();
       const snapshot = captureState();
       turnHistory.push(snapshot);
       updateUndoAvailability();
@@ -541,6 +607,7 @@
       startingPlayer = snapshot.startingPlayer;
       gameOver = snapshot.gameOver;
       turnReady = snapshot.turnReady ?? true;
+      lastTurnPlacement = snapshot.lastPlacement ? { row: snapshot.lastPlacement.row, col: snapshot.lastPlacement.col, player: snapshot.lastPlacement.player, rows: snapshot.lastPlacement.rows, cols: snapshot.lastPlacement.cols } : null;
       rotatePending = false;
       animating = false;
       rotating = false;
@@ -804,6 +871,9 @@
       undoToggle.checked = undoEnabled;
       undoToggle.addEventListener('change', () => {
         undoEnabled = undoToggle.checked;
+        if(!undoEnabled){
+          clearUndoGhost();
+        }
         updateUndoAvailability();
       });
     }
