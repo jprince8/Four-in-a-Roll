@@ -69,8 +69,8 @@
     .grid .disc.show{ opacity:1; }
 
     @keyframes undoGhostPulse{
-      0%, 100%{ opacity:0.2; transform:scale(0.92); }
-      50%{ opacity:0.45; transform:scale(1.04); }
+      0%, 100%{ transform:scale(0.92); }
+      50%{ transform:scale(1.04); }
     }
 
     .cell.undo-ghost::after{
@@ -78,16 +78,16 @@
       position:absolute;
       inset:14px;
       border-radius:50%;
-      opacity:0.25;
+      opacity:0.8;
       animation: undoGhostPulse 1s ease-in-out infinite;
-      background: rgba(255,255,255,0.35);
-      box-shadow:0 0 0 3px rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.8);
+      box-shadow:0 0 0 3px rgba(255,255,255,0.24);
       pointer-events:none;
       z-index:2;
     }
 
-    .cell.undo-ghost.ghost-p1::after{ background: rgba(230,57,70,0.32); box-shadow:0 0 0 3px rgba(230,57,70,0.18); }
-    .cell.undo-ghost.ghost-p2::after{ background: rgba(244,208,63,0.28); box-shadow:0 0 0 3px rgba(244,208,63,0.18); }
+    .cell.undo-ghost.ghost-p1::after{ background: rgba(230,57,70,0.8); box-shadow:0 0 0 3px rgba(230,57,70,0.28); }
+    .cell.undo-ghost.ghost-p2::after{ background: rgba(244,208,63,0.8); box-shadow:0 0 0 3px rgba(244,208,63,0.28); }
 
     .disc.p1{ background: radial-gradient(circle at 30% 25%, #fff4, #0000 45%), var(--red); }
     .disc.p2{ background: radial-gradient(circle at 30% 25%, #fff4, #0000 45%), var(--yellow); }
