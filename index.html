@@ -160,6 +160,16 @@
                   </span>
                 </label>
                 <p class="settings-hint" id="randomRotationHint">Makes the game less predictable</p>
+                <label class="toggle" for="rotatedStartToggle">
+                  <span>Start new games 6x7</span>
+                  <span class="toggle-control">
+                    <input id="rotatedStartToggle" type="checkbox" aria-describedby="rotatedStartHint" />
+                    <span class="toggle-track" aria-hidden="true">
+                      <span class="toggle-thumb"></span>
+                    </span>
+                  </span>
+                </label>
+                <p class="settings-hint" id="rotatedStartHint">When on, new games begin with 6 columns by 7 rows.</p>
                 <label class="toggle" for="undoToggle">
                   <span>Enable undo</span>
                   <span class="toggle-control">
@@ -200,10 +210,13 @@
     'use strict';
 
     // ==== Constants (mutable via rotation) ====
-    let ROWS = 6;   // bottom index = 0
-    let COLS = 7;
+    const ORIENTATION_STANDARD = { rows: 6, cols: 7 };
+    const ORIENTATION_ROTATED = { rows: 7, cols: 6 };
+    let ROWS = ORIENTATION_STANDARD.rows;   // bottom index = 0
+    let COLS = ORIENTATION_STANDARD.cols;
 
     // ==== State ====
+    let startOrientationRotated = false;
     let board = makeBoard(ROWS, COLS); // 0 empty, 1 p1, 2 p2
     let currentPlayer = 1; // 1 or 2
     let startingPlayer = 1; // alternates who begins on each reset (first reset -> Yellow)
@@ -238,6 +251,7 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsMenu = document.getElementById('settingsMenu');
     const randomRotationToggle = document.getElementById('randomRotationToggle');
+    const rotatedStartToggle = document.getElementById('rotatedStartToggle');
     const undoBtn = document.getElementById('undoBtn');
     const undoToggle = document.getElementById('undoToggle');
 
@@ -507,11 +521,23 @@
       return true;
     }
 
+    function getStartingOrientation(){
+      return startOrientationRotated ? ORIENTATION_ROTATED : ORIENTATION_STANDARD;
+    }
+
+    function applyStartingOrientation(){
+      const { rows, cols } = getStartingOrientation();
+      ROWS = rows;
+      COLS = cols;
+    }
+
     function resetGame(){
       if(rotateTimer){ clearTimeout(rotateTimer); rotateTimer = null; }
       rotatePending = false;
       animating = false;
       rotating = false;
+      applyStartingOrientation();
+      selectedColumn = Math.min(selectedColumn, COLS - 1);
       board = makeBoard(ROWS, COLS);
       gameOver = false;
       // Flip the starter FIRST so the 2nd game begins with Yellow
@@ -521,9 +547,7 @@
       inputLock = false;
       lastTurnPlacement = null;
       clearWinHighlights();
-      clearUndoGhost();
-      renderBoard();
-      updateSelector();
+      buildBoard();
       updateStatusDisc();
       popupEl.classList.remove('show');
       statusEl.textContent = currentPlayer === 1 ? 'Red to move' : 'Yellow to move';
@@ -864,6 +888,14 @@
       randomRotationToggle.checked = randomizeRotation;
       randomRotationToggle.addEventListener('change', () => {
         randomizeRotation = randomRotationToggle.checked;
+      });
+    }
+
+    if(rotatedStartToggle){
+      rotatedStartToggle.checked = startOrientationRotated;
+      rotatedStartToggle.addEventListener('change', () => {
+        startOrientationRotated = rotatedStartToggle.checked;
+        resetGame();
       });
     }
 
