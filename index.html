@@ -172,7 +172,7 @@
     <span class="sr-only">Open menu</span>
   </button>
   <div class="menu-overlay" id="menuOverlay" aria-hidden="true"></div>
-  <aside class="side-menu" id="sideMenu" tabindex="-1" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Settings menu">
+  <aside class="side-menu" id="sideMenu" tabindex="-1" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Settings menu" inert>
     <button id="closeMenuBtn" class="menu-close" type="button">
       <span aria-hidden="true">&times;</span>
       <span class="sr-only">Close menu</span>
@@ -390,9 +390,10 @@
         settingsBtn.setAttribute('aria-expanded', String(open));
       }
       if(settingsMenu){
-        settingsMenu.setAttribute('aria-hidden', String(!open));
-        settingsMenu.classList.toggle('open', open);
         if(open){
+          settingsMenu.classList.add('open');
+          settingsMenu.setAttribute('aria-hidden', 'false');
+          settingsMenu.removeAttribute('inert');
           if(gameModeSelect){
             gameModeSelect.value = tombolaMode ? 'tombola'
               : (randomTombolaMode ? 'random-tombola'
@@ -400,9 +401,19 @@
               : (randomizeRotation ? 'random' : 'normal')));
           }
           updateGameModeHint();
-          requestAnimationFrame(() => settingsMenu.focus());
+          const focusTarget = closeMenuBtn || settingsMenu;
+          requestAnimationFrame(() => focusTarget.focus());
         } else {
-          settingsMenu.blur();
+          if(settingsMenu.contains(document.activeElement)){
+            if(settingsBtn){
+              settingsBtn.focus();
+            } else if(document.activeElement && 'blur' in document.activeElement){
+              document.activeElement.blur();
+            }
+          }
+          settingsMenu.classList.remove('open');
+          settingsMenu.setAttribute('aria-hidden', 'true');
+          settingsMenu.setAttribute('inert', '');
         }
       }
       if(settingsOverlay){
