@@ -20,6 +20,7 @@ from tqdm import tqdm
 SUCCESSOR_CACHE = {}
 WINNER_CACHE = {}
 DISC_RESOLUTION = 22
+OUTDIR = "outputs"
 
 # ----------------------------
 # Game rules & board utilities
@@ -211,7 +212,7 @@ def cached_successors(board, mover, key=None):
 # -----------------------------------------
 # Build layers with pruning & deterministic IDs
 # -----------------------------------------
-def build_layers_pruned_with_ids(turns: int):
+def build_layers_pruned_with_ids(turns: int, *, disable_progress: bool = False):
     start = make_board()
     start_key = board_key(start)
 
@@ -235,7 +236,12 @@ def build_layers_pruned_with_ids(turns: int):
     layers = {0: [0]}
     next_id = 1
 
-    progress = tqdm(total=0, desc="Expanding tree", unit="parent", disable=not sys.stderr.isatty())
+    progress = tqdm(
+        total=0,
+        desc="Expanding tree",
+        unit="parent",
+        disable=disable_progress or not sys.stderr.isatty(),
+    )
 
     try:
         for layer in range(1, turns + 1):
@@ -362,22 +368,27 @@ def filter_to_winning_paths(nodes, layers):
 # -----------------------------------------
 def render_full_logic(
     turns: int,
-    out_pdf: str,
-    out_json: str,
     *,
     plot_pdf: bool = False,
     exclude_wins: bool = False,
     max_lookahead: Optional[int] = None,
+    disable_progress: bool = False,
 ):
     SUCCESSOR_CACHE.clear()
     WINNER_CACHE.clear()
 
+    base = f"state_graph_{INIT_COLS}x{INIT_ROWS}_{turns}t{'_exclude_wins' if exclude_wins else ''}{f'_lookahead_{max_lookahead}' if max_lookahead else ''}"
+    out_pdf = os.path.join(OUTDIR, f"{base}.pdf") if plot_pdf else None
+    out_json = os.path.join(OUTDIR, f"{base}.json")
+
     for path in (out_pdf, out_json):
+        if path is None:
+            continue
         directory = os.path.dirname(path)
         if directory:
             os.makedirs(directory, exist_ok=True)
 
-    nodes_full, layers_full = build_layers_pruned_with_ids(turns)
+    nodes_full, layers_full = build_layers_pruned_with_ids(turns, disable_progress=disable_progress)
     nodes, truncated_nodes, layers = filter_to_winning_paths(nodes_full, layers_full)
     truncated_ids = set(truncated_nodes.keys())
 
@@ -916,7 +927,7 @@ def render_full_logic(
                 "has_orange_below": has_orange_below(node_id),
                 "downstream_winners": sorted(list(downstream_winners(node_id))),
             })
-            if not printed:
+            if not printed and not disable_progress:
                 print(f"\nfirst node state: {state_label(node_id)}\n")
                 printed = True
 
@@ -937,6 +948,7 @@ def render_full_logic(
 
     if plot_pdf:
         print("Rendering PDF...")
+        assert out_pdf is not None
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
@@ -1098,7 +1110,7 @@ def render_full_logic(
         fig.savefig(out_pdf, bbox_inches='tight')
         plt.close(fig)
 
-    return out_pdf, out_json
+    return out_json, out_pdf
 
 # ----------------------------
 # Run
@@ -1153,14 +1165,8 @@ if __name__ == "__main__":
     else:
         INIT_ROWS, INIT_COLS = default_rows, default_cols
 
-    OUTDIR = "outputs"
-    BASE = f"state_graph_{INIT_COLS}x{INIT_ROWS}_{args.turns}t{'_exclude_wins' if args.exclude_wins else ''}{f'_lookahead_{args.max_lookahead}' if args.max_lookahead else ''}"
-    OUTFILE_PDF = os.path.join(OUTDIR, f"{BASE}.pdf")
-    OUTFILE_JSON = os.path.join(OUTDIR, f"{BASE}.json")
-    pdf_path, json_path = render_full_logic(
+    json_path, pdf_path = render_full_logic(
         args.turns,
-        OUTFILE_PDF,
-        OUTFILE_JSON,
         plot_pdf=args.plot_pdf,
         exclude_wins=args.exclude_wins,
         max_lookahead=args.max_lookahead,
