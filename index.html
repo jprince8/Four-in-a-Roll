@@ -8,9 +8,9 @@
   <title>Four in a Roll</title>
   <style>
     :root{
-      --cell-size: clamp(49px, 7.65vmin, 77px);
       --cols: 7;
       --rows: 6;
+      --max-dimension: max(var(--cols), var(--rows));
       --board-blue: #0f3b8c;
       --board-blue-dark: #0b2f70;
       --bg: #0b1020;
@@ -21,17 +21,37 @@
       --win: #34d399;   /* highlight */
       --shadow: 0 10px 25px rgba(0,0,0,0.25);
       --radius: 18px;
-      --panel-width: min(98vw, calc(var(--cell-size) * var(--cols) + (var(--cols) - 1) * 8px + 32px));
     }
 
-    html, body{ height:100%; background: radial-gradient(1200px 700px at 70% -10%, #14233f 0%, #0a0f1e 55%, #070b16 100%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; margin:0; }
+    /* Scoped variables inside the app container */
+    .app {
+      --usable-w: 75cqw; /* 75% of .app’s width */
+      --usable-h: 60cqh; /* 60% of .app’s height */
+
+      /* take the smaller of the two usable sizes */
+      --usable-space: min(var(--usable-w), var(--usable-h));
+
+      /* derive target cell size from that smaller space */
+      --target-cell: calc(var(--usable-space) / var(--max-dimension));
+      --cell-size: clamp(20px, var(--target-cell), 77px);
+      --hole-inset: calc(var(--cell-size) * 0.125);   /* ≈ 8px at 64px cell */
+      /* --gap:        var(--hole-inset); */
+      --gap: clamp(0px, calc(var(--target-cell) * 0.125), 12px);
+    }
+
+    html, body{ min-height: 100dvh; overflow: hidden; background: radial-gradient(1200px 700px at 70% -10%, #14233f 0%, #0a0f1e 55%, #070b16 100%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; margin:0; }
     *, *::before, *::after{ box-sizing: border-box; }
 
-    .app{display:flex; align-items:center; justify-content:center; min-height:100%; padding:22px;}
-    .panel{ width: var(--panel-width); }
+    body {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;  /* header | app | footer */
+    }
 
-    .header{ position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 0px); width: 100%; padding:10px 12px; z-index:1000; }
-.header-inner{ width:100%; max-width:none; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 0 clamp(12px, 3vw, 24px); }
+    .app{min-height: 0; display:flex; align-items:center; justify-content:center; overflow: hidden; container-type: size; container-name: app; }
+    /* .panel{} */
+
+    .header{ position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 0px); width: 100%; padding:10px 12px; z-index:5; }
+    .header-inner{ width:100%; max-width:none; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 0 clamp(12px, 3vw, 24px); }
     .status{display:flex; align-items:center; gap:10px; font-weight:600; flex:1; min-width:0; }
     .status .disc{ width:22px; height:22px; border-radius:50%; box-shadow: var(--shadow); opacity: 1; position: static; inset: auto; }
 
@@ -78,14 +98,14 @@
 
     .board-wrap{ position: relative; padding: 16px; border-radius: calc(var(--radius) + 10px); background: linear-gradient(180deg, var(--board-blue) 0%, var(--board-blue-dark) 100%); box-shadow: var(--shadow); transform-origin: 50% 50%; transition: transform 1s cubic-bezier(.22,.9,.25,1.0); }
 
-    .grid{ display:grid; grid-template-columns: repeat(var(--cols), var(--cell-size)); grid-template-rows: repeat(var(--rows), var(--cell-size)); gap:8px; margin: 0 auto; width: fit-content; user-select:none; position: relative; z-index: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    .grid{ display:grid; grid-template-columns: repeat(var(--cols), var(--cell-size)); grid-template-rows: repeat(var(--rows), var(--cell-size)); gap:var(--gap); margin: 0 auto; width: fit-content; user-select:none; position: relative; z-index: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
     .cell{ width: var(--cell-size); height: var(--cell-size); position:relative; cursor: pointer; }
     .cell::before{ content:""; position:absolute; inset:0; border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.10), rgba(0,0,0,0.18)); box-shadow: inset 0 0 0 18px rgba(0,0,0,0.15), inset 0 0 18px rgba(0,0,0,0.25); }
-    .hole{  position:absolute; inset:8px; border-radius:50%; background: radial-gradient(circle at 45% 40%, rgba(255,255,255,.25), rgba(255,255,255,0) 35%), #0b1530; box-shadow: inset 0 0 10px rgba(0,0,0,.45);  z-index:1; }
+    .hole{  position:absolute; inset:var(--hole-inset); border-radius:50%; background: radial-gradient(circle at 45% 40%, rgba(255,255,255,.25), rgba(255,255,255,0) 35%), #0b1530; box-shadow: inset 0 0 10px rgba(0,0,0,.45);  z-index:1; }
 
     /* Grid discs */
-    .grid .disc{ position:absolute; inset:8px; border-radius:50%; opacity:0; box-shadow: 0 6px 14px rgba(0,0,0,.35), inset 0 -6px 10px rgba(0,0,0,0.18), inset 0 8px 18px rgba(255,255,255,.15); transition: opacity .001s linear; will-change: opacity; z-index:1; pointer-events: none; }
+    .grid .disc{ position:absolute; inset:var(--hole-inset); border-radius:50%; opacity:0; box-shadow: 0 6px 14px rgba(0,0,0,.35), inset 0 -6px 10px rgba(0,0,0,0.18), inset 0 8px 18px rgba(255,255,255,.15); transition: opacity .001s linear; will-change: opacity; z-index:1; pointer-events: none; }
     .grid .disc.show{ opacity:1; }
 
     @keyframes undoGhostPulse{
@@ -123,7 +143,7 @@
 
     .grid .disc.win{ outline: 6px solid var(--win); box-shadow: 0 0 0 8px rgba(52,211,153,.18), 0 0 30px rgba(52,211,153,.5), 0 6px 14px rgba(0,0,0,.35) }
 
-    .scoreboard{ display:flex; justify-content:center; gap:20px; margin:12px 0 18px; width:100%; padding:0 clamp(12px, 3vw, 24px); font-weight:700; text-transform:uppercase; letter-spacing:0.06em; font-size:0.95rem; flex-wrap:wrap; }
+    .scoreboard{ display:flex; justify-content:center; gap:20px; margin:12px 0 18px; width:100%; padding:0 clamp(12px, 3vw, 24px); font-weight:700; text-transform:uppercase; letter-spacing:0.06em; font-size:0.95rem; flex-wrap:wrap; position:relative; z-index:5; }
     .scoreboard .score{ display:flex; align-items:center; gap:10px; padding:12px 18px; border-radius:14px; background:rgba(13,24,48,0.7); box-shadow: var(--shadow); min-width:140px; justify-content:center; }
     .scoreboard .label{ display:flex; align-items:center; gap:8px; }
     .scoreboard .label::before{ content:""; width:16px; height:16px; border-radius:50%; box-shadow: var(--shadow); }
@@ -211,18 +231,6 @@
   </div>
   <div class="app">
     <div class="panel" role="application" aria-label="Connect 4 game">
-      <div class="header">
-        <div class="header-inner">
-          <div class="status" id="status" aria-live="polite">
-            <div class="disc" id="statusDisc" aria-hidden="true"></div>
-            <span id="statusText">Red to move</span>
-          </div>
-          <div class="controls">
-            <button id="undoBtn" title="Undo last turn (Ctrl+Z / ⌘Z)" hidden>Undo</button>
-            <button id="resetBtn" title="New game (R)">New game</button>
-          </div>
-        </div>
-      </div>
 
       <div class="board-wrap">
         <div class="grid" id="grid" role="grid" aria-label="7 columns by 6 rows connect four board"></div>
@@ -238,6 +246,18 @@
       </div>
 
       <p class="sr-only" id="live" aria-live="polite"></p>
+    </div>
+  </div>
+  <div class="header">
+    <div class="header-inner">
+      <div class="status" id="status" aria-live="polite">
+        <div class="disc" id="statusDisc" aria-hidden="true"></div>
+        <span id="statusText">Red to move</span>
+      </div>
+      <div class="controls">
+        <button id="undoBtn" title="Undo last turn (Ctrl+Z / ⌘Z)" hidden>Undo</button>
+        <button id="resetBtn" title="New game (R)">New game</button>
+      </div>
     </div>
   </div>
 
@@ -532,61 +552,78 @@
     }
 
     // === Animations ===
-    const EASE_DOWN = 'cubic-bezier(.11, 0, .5, 0)'; // ease-in
-    const EASE_UP   = 'cubic-bezier(.33, 1, .68, 1)'; // ease-out
-    const DROP_SPEED_PX_PER_MS = 0.6; // global constant speed (slower)
+  const EASE_DOWN = 'cubic-bezier(.11, 0, .5, 0)'; // ease-in
+  const EASE_UP   = 'cubic-bezier(.33, 1, .68, 1)'; // ease-out
 
-    function computeTiming(distance, pxPerMs = DROP_SPEED_PX_PER_MS){
-      const mainMs = distance / pxPerMs;     // proportional to distance
-      const bounceMs = mainMs * 0.18;        // 18% of main
-      const total = mainMs + 2 * bounceMs;
-      const k1 = mainMs / total;             // impact fraction
-      const k2 = (mainMs + bounceMs) / total;// apex fraction
-      const bounceUp = Math.max(6, distance * 0.10);
-      return { mainMs, bounceMs, total, k1, k2, bounceUp };
+  // Resolution-independent speed control
+  const TARGET_FULL_DROP_MS = 900; // time for a full-board drop (tweak to taste)
+
+  function computeTiming(distance, pxPerMs) {
+    const mainMs   = distance / pxPerMs;   // proportional to distance
+    const bounceMs = mainMs * 0.18;        // 18% of main
+    const total    = mainMs + 2 * bounceMs;
+    const k1       = mainMs / total;       // impact fraction
+    const k2       = (mainMs + bounceMs) / total; // apex fraction
+    const bounceUp = Math.max(6, distance * 0.10);
+    return { mainMs, bounceMs, total, k1, k2, bounceUp };
+  }
+
+  function animateDrop(floatEl, startTop, endTop, delayMs = 0) {
+    const distance = Math.abs(endTop - startTop);
+    if (distance <= 0.5) {
+      floatEl.style.top = endTop + 'px';
+      return new Animation();
     }
 
-    function animateDrop(floatEl, startTop, endTop, delayMs = 0){
-      const distance = Math.abs(endTop - startTop);
-      if (distance <= 0.5) {
-        floatEl.style.top = endTop + 'px';
-        return new Animation();
-      }
-      const { total, k1, k2, bounceUp } = computeTiming(distance, DROP_SPEED_PX_PER_MS);
+    const container = document.querySelector('.board-wrap');
+    const containerH = container.getBoundingClientRect().height || 1;
+    const pxPerMs = containerH / TARGET_FULL_DROP_MS;
+    const { total, k1, k2, bounceUp } = computeTiming(distance, pxPerMs);
 
-      return floatEl.animate([
-        { top: startTop + 'px',            offset: 0,   easing: EASE_DOWN }, // ease-in fall
-        { top: endTop   + 'px',            offset: k1,  easing: EASE_UP    }, // bounce upward: ease-out
-        { top: (endTop - bounceUp) + 'px', offset: k2,  easing: EASE_DOWN  }, // fall back: ease-in
-        { top: endTop   + 'px',            offset: 1 }
-      ], { duration: total, fill: 'forwards', delay: delayMs });
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) {
+      floatEl.style.top = endTop + 'px';
+      return new Animation();
     }
 
-    function dropAnimation(row, col, player, done){
-      const container = document.querySelector('.board-wrap');
-      const cRect = container.getBoundingClientRect();
-      const topDisc = queryDisc(ROWS-1, col);
-      const targetDisc = queryDisc(row, col);
-      if(!topDisc || !targetDisc){ done && done(); return; }
+    return floatEl.animate([
+      { top: startTop + 'px',            offset: 0,   easing: EASE_DOWN },
+      { top: endTop   + 'px',            offset: k1,  easing: EASE_UP   },
+      { top: (endTop - Math.min(bounceUp, distance * 0.6)) + 'px', offset: k2, easing: EASE_DOWN },
+      { top: endTop   + 'px',            offset: 1 }
+    ], { duration: total, fill: 'forwards', delay: delayMs });
+  }
 
-      const startRect = topDisc.getBoundingClientRect();
-      const endRect   = targetDisc.getBoundingClientRect();
-      const size = Math.min(endRect.width, endRect.height);
-      const floatDisc = document.createElement('div');
-      floatDisc.className = 'disc ' + (player===1?'p1':'p2') + ' floating';
-      floatDisc.style.width = size + 'px';
-      floatDisc.style.height = size + 'px';
-      floatDisc.style.left = (endRect.left - cRect.left) + 'px';
-      floatDisc.style.top  = (startRect.top - cRect.top - size - 8) + 'px'; // start above board
-      floatDisc.style.transform = 'translateZ(0)';
-      container.appendChild(floatDisc);
+  function dropAnimation(row, col, player, done) {
+    const container = document.querySelector('.board-wrap');
+    const cRect = container.getBoundingClientRect();
+    const topDisc = queryDisc(ROWS - 1, col);
+    const targetDisc = queryDisc(row, col);
+    if (!topDisc || !targetDisc) { done && done(); return; }
 
-      const startTop = parseFloat(floatDisc.style.top);
-      const endTop   = (endRect.top - cRect.top);
-      const anim = animateDrop(floatDisc, startTop, endTop, 0);
-      anim.onfinish = () => { requestAnimationFrame(()=>floatDisc.remove()); done && done(); };
-      anim.oncancel = anim.onfinish;
-    }
+    const startRect = topDisc.getBoundingClientRect();
+    const endRect   = targetDisc.getBoundingClientRect();
+    const size = Math.min(endRect.width, endRect.height);
+
+    const floatDisc = document.createElement('div');
+    floatDisc.className = 'disc ' + (player === 1 ? 'p1' : 'p2') + ' floating';
+    floatDisc.style.width = size + 'px';
+    floatDisc.style.height = size + 'px';
+    floatDisc.style.left = (endRect.left - cRect.left) + 'px';
+    floatDisc.style.top  = (startRect.top - cRect.top - size - 8) + 'px'; // start above board
+    floatDisc.style.transform = 'translateZ(0)';
+    container.appendChild(floatDisc);
+
+    const startTop = parseFloat(floatDisc.style.top);
+    const endTop   = (endRect.top - cRect.top);
+
+    const anim = animateDrop(floatDisc, startTop, endTop, 0);
+    anim.onfinish = () => {
+      requestAnimationFrame(() => floatDisc.remove());
+      done && done();
+    };
+    anim.oncancel = anim.onfinish;
+  }
 
     function queryDisc(row, col){ return gridEl.querySelector('.disc[data-row="' + row + '"][data-col="' + col + '"]'); }
 
