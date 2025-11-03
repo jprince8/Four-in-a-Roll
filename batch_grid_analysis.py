@@ -23,6 +23,7 @@ DEFAULT_MIN_ROWS = 4
 DEFAULT_MAX_ROWS = 7
 DEFAULT_MIN_COLS = 4
 DEFAULT_MAX_COLS = 7
+MAX_WORKERS = None  # Use os.cpu_count() by default
 
 
 @dataclass(frozen=True)
@@ -35,8 +36,6 @@ class BoardSpec:
 class RenderOptions:
     plot_pdf: bool
     exclude_wins: bool
-    max_lookahead: Optional[int]
-    output_dir: str
 
 
 @dataclass
@@ -48,7 +47,6 @@ class BoardResult:
     status: str
     fill_colour: str
     json_path: str
-    pdf_path: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,42 +77,10 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MAX_COLS,
         help=f"maximum column count (inclusive, default: {DEFAULT_MAX_COLS})",
     )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=None,
-        help="number of parallel workers (default: CPU count)",
-    )
-    parser.add_argument(
-        "--max-lookahead",
-        type=int,
-        default=None,
-        help="limit forced-win lookahead depth passed through to the analysis script",
-    )
-    parser.add_argument(
-        "--exclude-wins",
-        action="store_true",
-        help="mirror the --exclude-wins option from the base analysis",
-    )
-    parser.add_argument(
-        "--plot-pdf",
-        action="store_true",
-        help="forward --plot-pdf to render PDF artefacts per board",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=os.path.join("outputs", "batch_runs"),
-        help="directory to store per-board JSON/PDF artefacts",
-    )
-    parser.add_argument(
-        "--spreadsheet",
-        default=None,
-        help="path to the colour-coded spreadsheet to write (default includes row/col ranges)",
-    )
     return parser.parse_args()
 
 
-def build_jobs(args: argparse.Namespace) -> Tuple[List[BoardSpec], RenderOptions]:
+def build_jobs(args: argparse.Namespace) -> List[BoardSpec]:
     if args.min_rows > args.max_rows:
         raise ValueError("min-rows must be ≤ max-rows")
     if args.min_cols > args.max_cols:
@@ -125,13 +91,7 @@ def build_jobs(args: argparse.Namespace) -> Tuple[List[BoardSpec], RenderOptions
     rows = range(args.min_rows, args.max_rows + 1)
     cols = range(args.min_cols, args.max_cols + 1)
     specs = [BoardSpec(r, c) for r, c in itertools.product(rows, cols)]
-    render_opts = RenderOptions(
-        plot_pdf=args.plot_pdf,
-        exclude_wins=args.exclude_wins,
-        max_lookahead=args.max_lookahead,
-        output_dir=args.output_dir,
-    )
-    return specs, render_opts
+    return specs
 
 
 def _summarise_root(node: Dict[str, object], p1_token: int, p2_token: int) -> Tuple[str, str]:
@@ -147,22 +107,17 @@ def _summarise_root(node: Dict[str, object], p1_token: int, p2_token: int) -> Tu
     return "Draw", "FFB0BEC5"
 
 
-def analyse_board(spec: BoardSpec, opts: RenderOptions) -> BoardResult:
+def analyse_board(spec: BoardSpec) -> BoardResult:
     # Local import for isolated globals per process.
     analysis_module = importlib.import_module("four_in_a_roll_analysis")
     analysis = cast(Any, analysis_module)
 
     turns = spec.rows * spec.cols
 
-    os.makedirs(opts.output_dir, exist_ok=True)
-
     analysis.INIT_ROWS = spec.rows
     analysis.INIT_COLS = spec.cols
     json_path, pdf_path = analysis.render_full_logic(
         turns,
-        plot_pdf=opts.plot_pdf,
-        exclude_wins=opts.exclude_wins,
-        max_lookahead=opts.max_lookahead,
         disable_progress=True,
     )
 
@@ -192,24 +147,21 @@ def analyse_board(spec: BoardSpec, opts: RenderOptions) -> BoardResult:
         status=status,
         fill_colour=fill,
         json_path=json_path,
-        pdf_path=pdf_path if opts.plot_pdf else "",
     )
 
 
 def collect_results(
     specs: Iterable[BoardSpec],
-    opts: RenderOptions,
-    workers: Optional[int],
 ) -> List[BoardResult]:
     specs_list = list(specs)
     results: List[BoardResult] = []
-    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool, tqdm(
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as pool, tqdm(
         total=len(specs_list),
         desc="Boards",
         unit="board",
     ) as progress:
         future_to_spec = {
-            pool.submit(analyse_board, spec, opts): spec for spec in specs_list
+            pool.submit(analyse_board, spec): spec for spec in specs_list
         }
         for future in concurrent.futures.as_completed(future_to_spec):
             spec = future_to_spec[future]
@@ -292,8 +244,8 @@ def write_spreadsheet(
 
 def main() -> None:
     args = parse_args()
-    specs, render_opts = build_jobs(args)
-    spreadsheet_path = args.spreadsheet or os.path.join(
+    specs = build_jobs(args)
+    spreadsheet_path = os.path.join(
         "outputs",
         f"batch_summary_r{args.min_rows}-{args.max_rows}_c{args.min_cols}-{args.max_cols}.xlsx",
     )
@@ -301,7 +253,7 @@ def main() -> None:
         f"Running analysis for {len(specs)} boards: "
         f"rows {args.min_rows}-{args.max_rows}, cols {args.min_cols}-{args.max_cols}"
     )
-    results = collect_results(specs, render_opts, args.workers)
+    results = collect_results(specs)
     write_spreadsheet(results, spreadsheet_path)
 
     print("\nSummary:")
